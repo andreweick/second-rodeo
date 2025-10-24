@@ -1,0 +1,39 @@
+# Node / pnpm
+node_modules/
+pnpm-lock.yaml
+
+# Build outputs (Astro, Workers)
+apps/**/dist/
+apps/**/.astro/
+apps/**/.vercel/
+apps/**/.netlify/
+apps/**/.output/
+
+# Local env + secrets
+*.local
+.env
+.env.*
+!.env.example
+
+# Wrangler local state (D1, KV, etc.)
+**/.wrangler/
+**/.wrangler/state/
+
+# Drizzle generated artifacts
+apps/**/migrations/.cache/
+packages/**/migrations/.cache/
+
+# OS cruft
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*

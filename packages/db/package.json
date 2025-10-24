@@ -1,0 +1,13 @@
+{
+  "name": "@app/db",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./schema": "./schema.ts",
+    "./client": "./client.ts"
+  },
+  "dependencies": {
+    "drizzle-orm": "^0.33.0"
+  }
+}

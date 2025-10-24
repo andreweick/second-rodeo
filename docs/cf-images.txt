@@ -1,0 +1,269 @@
+TITLE: Astro + Cloudflare Images (HMAC-signed, 30-day buckets) — eick.com
+
+GOAL
+- Serve all site images from your domain (https://eick.com) using Cloudflare Images.
+- For PRIVATE images, use HMAC-signed URLs with a default 30-day expiry “bucket” to keep caches hot.
+- For PUBLIC images, serve unsigned for maximum cache reuse.
+- Provide a reusable Astro component for responsive images backed by a small, 2025-ready variant set.
+
+-------------------------------------------------------------------------------
+ARCHITECTURE OVERVIEW
+1) Cloudflare Images stores originals; define a small set of width-based variants:
+   - Main gallery (landscape):  w800, w1280, w1920, w2560   (fit=scale-down)
+   - Square thumbs:             sq256, sq512                (fit=cover)
+
+2) Public delivery path (unsigned, cache-optimal):
+   - Browser uses:    https://eick.com/images/<IMAGE_ID>/<VARIANT>
+   - Zone Rewrite:    /images/*  →  /cdn-cgi/imagedelivery/<ACCOUNT_HASH>/${1}
+
+3) Private delivery path (signed at request time, 30-day buckets):
+   - Browser uses:    https://eick.com/images-secure/<IMAGE_ID>/<VARIANT>
+   - A tiny Worker signs and 302-redirects to:
+                      https://imagedelivery.net/<ACCOUNT_HASH>/<IMAGE_ID>/<VARIANT>?exp=...&sig=...
+
+4) Astro component builds responsive `srcset` with the variants above and CLS-safe aspect ratio.
+
+-------------------------------------------------------------------------------
+CLOUDFLARE SETUP (once)
+A) Cloudflare Images
+   - Upload originals as usual (avoid “custom ID” for private assets).
+   - Create the variants listed below (see “VARIANT DEFINITIONS”).
+   - For private assets: set requireSignedURLs=true at upload or via update.
+
+B) Zone URL Rewrite for PUBLIC images (no compute):
+   - If Path:  /images/*
+   - Rewrite:  /cdn-cgi/imagedelivery/<ACCOUNT_HASH>/${1}
+   - Ensure eick.com is proxied (orange cloud) and in the same account as Images.
+
+C) Obtain HMAC Signing Key (the shared secret):
+   - Dashboard → Images → Keys → Create/Retrieve Signing Key.
+   - Store in Workers secrets (see WRANGLER + SECRETS).
+
+-------------------------------------------------------------------------------
+WRANGLER + SECRETS
+wrangler.toml (essentials):
+--------------------------------
+name = "images-signer"
+main = "src/worker-images-signer.ts"
+compatibility_date = "2025-10-23"
+routes = [
+  { pattern = "eick.com/images-secure/*", custom_domain = true }
+]
+
+[vars]
+ACCOUNT_HASH = "REPLACE_WITH_YOUR_IMAGEDELIVERY_ACCOUNT_HASH"
+BUCKET_DAYS  = "30"   # default; change to 14/21/7 etc. as desired
+# no secret here
+
+# At deploy time, add the secret (do NOT commit secrets):
+#   wrangler secret put IMAGES_SIGN_KEY
+--------------------------------
+
+Set secret (local/dev/CI):
+--------------------------------
+$ wrangler secret put IMAGES_SIGN_KEY
+(paste the signing key from Images → Keys)
+--------------------------------
+
+-------------------------------------------------------------------------------
+WORKER: /images-secure/* (HMAC signing with 30-day buckets)
+File: src/worker-images-signer.ts
+--------------------------------
+export interface Env {
+  ACCOUNT_HASH: string;
+  BUCKET_DAYS: string;         // e.g., "30"
+  IMAGES_SIGN_KEY: string;     // Workers secret
+}
+
+const enc = new TextEncoder();
+
+function toHex(buf: ArrayBuffer) {
+  return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, "0")).join("");
+}
+
+export default {
+  async fetch(req: Request, env: Env): Promise<Response> {
+    const url = new URL(req.url);
+    // Expected path: /images-secure/<id>/<variant>
+    const pathParts = url.pathname.replace(/^\/+/, "").split("/");
+    if (pathParts.length < 3 || pathParts[0] !== "images-secure") {
+      return new Response("Bad path", { status: 400 });
+    }
+    const id = pathParts[1];
+    const variant = pathParts.slice(2).join("/"); // supports nested variant names
+
+    // Build canonical path to sign:
+    const path = `/${env.ACCOUNT_HASH}/${id}/${variant}`;
+
+    // Bucketed expiry (everyone shares same URL for the bucket window)
+    const days = Math.max(1, parseInt(env.BUCKET_DAYS || "30", 10));
+    const period = days * 24 * 60 * 60; // seconds
+    const now = Math.floor(Date.now() / 1000);
+    const bucketStart = Math.floor(now / period) * period;
+    const exp = bucketStart + period;
+
+    // Sign "<path>?exp=<exp>" with HMAC-SHA256
+    const key = await crypto.subtle.importKey(
+      "raw",
+      enc.encode(env.IMAGES_SIGN_KEY),
+      { name: "HMAC", hash: "SHA-256" },
+      false,
+      ["sign"]
+    );
+    const stringToSign = `${path}?exp=${exp}`;
+    const mac = await crypto.subtle.sign("HMAC", key, enc.encode(stringToSign));
+    const sig = toHex(mac);
+
+    // Option A: 302 redirect to imagedelivery.net (simplest, cache-friendly)
+    const signed = new URL(`https://imagedelivery.net${path}`);
+    signed.searchParams.set("exp", String(exp));
+    signed.searchParams.set("sig", sig);
+    return Response.redirect(signed.toString(), 302);
+
+    // Option B: proxy instead of redirect (keeps response on your domain)
+    // const r = await fetch(signed, { cf: { cacheTtl: period, cacheEverything: true } });
+    // const resp = new Response(r.body, r);
+    // resp.headers.set("Cache-Control", `public, max-age=${Math.min(period, 604800)}`);
+    // return resp;
+  }
+};
+--------------------------------
+
+Deploy:
+--------------------------------
+$ wrangler deploy
+--------------------------------
+
+-------------------------------------------------------------------------------
+ASTRO RESPONSIVE IMAGE COMPONENT
+File: src/components/CfImage.astro
+Purpose: Build responsive srcset for named variants, CLS-safe via aspect ratio.
+
+--------------------------------
+---
+interface Props {
+  id: string;                          // Cloudflare Images ID (UUID recommended)
+  widths?: number[];                   // e.g., [800, 1280, 1920, 2560]
+  prefix?: "/images" | "/images-secure";
+  sizes?: string;                      // browser hint for layout width
+  ratio: [number, number];             // e.g., [3,2] or [16,9] to prevent CLS
+  alt: string;
+  loading?: "lazy" | "eager";
+  fetchpriority?: "high" | "low" | "auto";
+  class?: string;
+  variantFor?: (w: number) => string;  // map width to variant name
+}
+
+const {
+  id,
+  widths = [800, 1280, 1920, 2560],
+  prefix = "/images", // use "/images-secure" for private
+  sizes = "(min-width: 1400px) 1300px, (min-width: 900px) 85vw, 95vw",
+  ratio,
+  alt,
+  loading = "lazy",
+  fetchpriority = "auto",
+  class: className,
+  variantFor = (w: number) => `w${w}`
+} = Astro.props;
+
+const entries = widths.slice().sort((a,b)=>a-b).map((w) => [`${prefix}/${id}/${variantFor(w)}`, `${w}w`] as const);
+const srcset = entries.map(([u, w]) => `${u} ${w}`).join(", ");
+const mid = entries[Math.floor(entries.length / 2)] ?? entries[0];
+const src = mid?.[0] ?? `${prefix}/${id}/${variantFor(widths[0] ?? 1280)}`;
+
+const [rw, rh] = ratio;
+---
+
+<img
+  src={src}
+  srcset={srcset}
+  sizes={sizes}
+  width={rw}
+  height={rh}
+  loading={loading}
+  fetchpriority={fetchpriority}
+  alt={alt}
+  class={className} />
+--------------------------------
+
+Usage (PUBLIC gallery image):
+--------------------------------
+---
+import CfImage from "../components/CfImage.astro";
+const imageId = "083eb7b2-5392-4565-b69e-aff66acddd00";
+---
+<CfImage
+  id={imageId}
+  prefix="/images"
+  widths={[800, 1280, 1920, 2560]}
+  sizes="(min-width: 1400px) 1300px, (min-width: 900px) 85vw, 95vw"
+  ratio={[3, 2]}
+  alt="Sunset over lake" />
+
+Usage (PRIVATE image that must self-expire):
+--------------------------------
+<CfImage
+  id={imageId}
+  prefix="/images-secure"
+  widths={[800, 1280, 1920, 2560]}
+  sizes="(min-width: 1400px) 1300px, (min-width: 900px) 85vw, 95vw"
+  ratio={[3, 2]}
+  alt="Client preview" />
+
+-------------------------------------------------------------------------------
+VARIANT DEFINITIONS (Cloudflare Images → Variants)
+Create these once; reuse everywhere.
+
+Main gallery (no crop, never upscale — best for photography):
+- id: w800
+  options: { width: 800,  height: 9999, fit: "scale-down", quality: 90, metadata: "none" }
+- id: w1280
+  options: { width: 1280, height: 9999, fit: "scale-down", quality: 90, metadata: "none" }
+- id: w1920
+  options: { width: 1920, height: 9999, fit: "scale-down", quality: 90, metadata: "none" }
+- id: w2560   (optional; for hero/lightbox)
+  options: { width: 2560, height: 9999, fit: "scale-down", quality: 90, metadata: "none" }
+
+Square thumbnails (cropped grid tiles):
+- id: sq256
+  options: { width: 256, height: 256, fit: "cover", quality: 85, metadata: "none" }
+- id: sq512
+  options: { width: 512, height: 512, fit: "cover", quality: 85, metadata: "none" }
+
+Notes:
+- Leave format unspecified; Cloudflare serves AVIF/WebP/JPEG by Accept header.
+- For PRIVATE assets, do NOT set neverRequireSignedURLs=true on variants.
+- For PUBLIC assets, you may mark selected variants public if needed.
+
+-------------------------------------------------------------------------------
+WHERE TO GET & STORE THE SHARED SECRET
+- Cloudflare Dashboard → Images → Keys → create/view the “Signing Key”.
+- Store it as a Workers secret:
+    $ wrangler secret put IMAGES_SIGN_KEY
+- Never commit secrets to git; do not store this in KV/D1. Use Workers secrets.
+
+-------------------------------------------------------------------------------
+ROTATION PLAYBOOK (no downtime)
+1) In Images → Keys, CREATE a new signing key (now both old+new are valid).
+2) Update/deploy Worker so it uses the NEW key (wrangler secret put IMAGES_SIGN_KEY).
+3) Wait your longest issued TTL (your BUCKET_DAYS window, default 30 days).
+4) DELETE the old signing key in Images → Keys.
+Tip: If you need urgent rotation, temporarily reduce BUCKET_DAYS (e.g., to 7), deploy, wait a week, then restore to 30.
+
+-------------------------------------------------------------------------------
+PUBLIC VS PRIVATE — RULE OF THUMB
+- Public galleries: use /images/... (unsigned) for best cache hit rate and cost.
+- Client/private/restricted: use /images-secure/... which the Worker signs per 30-day bucket.
+- You can mix both on the same site.
+
+-------------------------------------------------------------------------------
+TEST CHECKLIST
+[ ] /images/<id>/w1280 serves (unsigned) via zone rewrite.
+[ ] /images-secure/<id>/w1280 redirects to imagedelivery.net with exp+sig.
+[ ] Astro component renders CLS-safe markup (width/height or CSS aspect-ratio).
+[ ] Change BUCKET_DAYS in wrangler.toml and redeploy → new bucket boundary respected.
+[ ] Private images (requireSignedURLs=true) are not accessible via /images/... path.
+[ ] Public images load as AVIF/WebP where supported.
+
+END OF SPEC
