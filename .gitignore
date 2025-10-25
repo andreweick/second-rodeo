@@ -2,6 +2,9 @@
 node_modules/
 pnpm-lock.yaml
 
+# ignore wip directory
+wip
+
 # Build outputs (Astro, Workers)
 apps/**/dist/
 apps/**/.astro/
