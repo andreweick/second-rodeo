@@ -12,8 +12,8 @@ This document specifies the design and implementation of an image management API
 - Integration with Cloudflare Images for storage
 - Durable-first architecture with R2 as source of truth
 - D1 database as indexed view for fast queries
-- KV cache for hot-path optimization
-- Idempotent operations with deterministic IDs
+- Idempotent operations with deterministic content-hash IDs
+- HMAC-signed URLs for private image delivery
 
 ---
 
@@ -24,25 +24,18 @@ This document specifies the design and implementation of an image management API
 This API follows a **durable-first** architecture pattern where data durability and recoverability are prioritized:
 
 **1. R2 as Source of Truth (Canonical Storage)**
-- **Purpose:** Immutable, append-only event log in JSONL format
-- **Content:** Complete image metadata records, one JSON object per line
+- **Purpose:** Immutable storage, one JSON file per image
+- **Content:** Complete image metadata records with all extracted data
 - **Durability:** R2 provides 11 nines of durability
-- **Recovery:** Can rebuild D1 and KV entirely from R2 if needed
-- **Format:** JSONL enables streaming, line-by-line processing
+- **Recovery:** Can rebuild D1 entirely from R2 if needed
+- **Format:** Individual JSON files for simple, race-condition-free writes
 
 **2. D1 as Indexed View (Query Layer)**
 - **Purpose:** Fast queries, filtering, sorting, pagination
-- **Content:** Only fields needed for search and list operations
+- **Content:** All image metadata with indexes for common queries
 - **Relationship:** Derived from R2, can be rebuilt
 - **Updates:** Idempotent writes with `ON CONFLICT` clauses
-- **Role:** Searchable index, not source of truth
-
-**3. KV as Hot-Path Cache (Performance Layer)**
-- **Purpose:** Absorb read load for frequently accessed data
-- **Content:** Small summaries (recent images, user-specific lists)
-- **TTL:** Automatic expiration (e.g., 1 hour)
-- **Updates:** Write-through or write-behind
-- **Role:** Performance optimization, not required for correctness
+- **Role:** Searchable index, optimized for API queries
 
 ### Data Flow
 
@@ -53,20 +46,20 @@ Upload → Cloudflare Images → Store basic record in D1 → Queue metadata job
 [Metadata Extraction Phase - Queue Worker]
 Fetch from Cloudflare Images
     ↓
-Extract EXIF + IPTC + C2PA
+Extract EXIF + IPTC (fast, in Worker)
     ↓
-[1] Write complete record to R2 (JSONL) - SOURCE OF TRUTH
+Extract C2PA (call Golang container via Durable Object)
     ↓
-[2] Update D1 (indexed view)
+[1] Write complete record to R2 (single JSON file) - SOURCE OF TRUTH
     ↓
-[3] Update KV (cache hot paths)
+[2] Update D1 (indexed view) - idempotent
 ```
 
-**Why R2 write happens AFTER metadata extraction:**
-- R2 stores the COMPLETE, immutable record with all metadata
-- No need for partial writes or updates to R2
-- JSONL contains full context: upload info + all extracted metadata
-- Simpler: one append to R2 per image, not two
+**Why R2 write happens AFTER all metadata extraction:**
+- R2 stores the COMPLETE, immutable record with all metadata (EXIF + IPTC + C2PA)
+- Single write per image - no updates needed
+- Individual JSON files prevent race conditions
+- Simpler: one write to R2 per image, ever
 
 ### Key Principles
 
@@ -76,22 +69,23 @@ Extract EXIF + IPTC + C2PA
 - Replays are safe - same input produces same result
 - Enables retry logic without duplication
 
-**Streaming Ingest:**
-- JSONL format allows line-by-line reading from R2
-- Can process millions of records without loading all into memory
-- Rebuild operations are efficient and resumable
+**Simple Storage:**
+- One JSON file per image in R2
+- No complex append logic or race conditions
+- Rebuild operations: list all files and read each one
+- Parallel processing: each file is independent
 
 **Failure Recovery:**
-- If D1 is cleared: rebuild from R2 JSONL
-- If KV is cleared: performance degrades but data intact
+- If D1 is cleared: rebuild from R2 (list all JSON files)
 - If R2 is lost: catastrophic (but 11 nines durability)
 - Queue failures: retry with idempotent operations
+- Worker failures: queue system auto-retries
 
-**Event Sourcing:**
-- R2 JSONL acts as event log
-- Can replay events to rebuild state
-- Audit trail of all changes
-- Temporal queries possible (by filtering JSONL by timestamp)
+**Immutability:**
+- R2 files are written once, never updated
+- Image ID is content-based (same file = same ID)
+- Deduplication happens before upload
+- Audit trail via file timestamps and versions
 
 ---
 
@@ -101,57 +95,112 @@ Extract EXIF + IPTC + C2PA
 
 **Bucket:** `images-metadata`
 
-**Structure:** JSONL (JSON Lines) - one complete record per line
+**Structure:** Individual JSON files - one file per image
 
 **File Organization:**
 ```
-/images/YYYY/MM/DD/images.jsonl
+/images/{imageId}.json
 ```
 
-Example: `/images/2025/10/24/images.jsonl`
+Example: `/images/img_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6.json`
 
 **Benefits:**
-- Date-based partitioning for efficient querying
-- Easy to append new records
-- Can process in parallel by date
-- Simple to archive old data
+- Simple, race-condition-free writes (each image = separate file)
+- No complex append logic needed
+- Easy to rebuild: just list all files
+- Parallel processing: each file is independent
+- Immutable: write once, never update
 
-**JSONL Record Format:**
-```jsonl
-{"id":"img_a1b2c3d4e5f6","original_filename":"photo.jpg","cloudflare_image_id":"cf_xyz789","mime_type":"image/jpeg","file_size":2048576,"width":4032,"height":3024,"uploaded_at":1729785600000,"uploaded_by":"user123","exif_data":{"Make":"Canon","Model":"EOS R5","DateTime":"2025:10:20 14:30:00","FocalLength":"50mm","FNumber":2.8,"ISO":100,"GPS":{"latitude":42.3923,"longitude":-83.0495}},"iptc_data":{"caption":"Sample photo","creator":"John Doe","copyright":"© 2025 John Doe","keywords":["nature","landscape"]},"c2pa_manifest":{"claim_generator":"Adobe Photoshop 24.0","signature_valid":true,"issuer":"Adobe Content Credentials"},"c2pa_verified":true,"c2pa_signature_valid":true,"c2pa_issuer":"Adobe Content Credentials","cloudflare_url_base":"https://imagedelivery.net/account-hash/cf_xyz789","cloudflare_url_public":"https://imagedelivery.net/account-hash/cf_xyz789/public","variants":["public","thumbnail","medium","large"],"description":"Sample description","tags":["nature","landscape"],"status":"active","is_public":false,"metadata_status":"completed","updated_at":1729785605000,"deleted_at":null,"_version":"1.0","_written_at":1729785605000}
+**JSON Record Format:**
+```json
+{
+  "id": "img_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6",
+  "content_hash": "a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z6a7b8c9d0e1f2",
+  "original_filename": "photo.jpg",
+  "cloudflare_image_id": "cf_xyz789",
+  "mime_type": "image/jpeg",
+  "file_size": 2048576,
+  "width": 4032,
+  "height": 3024,
+  "uploaded_at": 1729785600000,
+  "uploaded_by": "user123",
+  "exif_data": {
+    "Make": "Canon",
+    "Model": "EOS R5",
+    "DateTime": "2025:10:20 14:30:00",
+    "FocalLength": "50mm",
+    "FNumber": 2.8,
+    "ISO": 100,
+    "GPS": {"latitude": 42.3923, "longitude": -83.0495}
+  },
+  "iptc_data": {
+    "caption": "Sample photo",
+    "creator": "John Doe",
+    "copyright": "© 2025 John Doe",
+    "keywords": ["nature", "landscape"]
+  },
+  "c2pa_manifest": {
+    "claim_generator": "Adobe Photoshop 24.0",
+    "signature_valid": true,
+    "issuer": "Adobe Content Credentials"
+  },
+  "c2pa_verified": true,
+  "c2pa_signature_valid": true,
+  "c2pa_issuer": "Adobe Content Credentials",
+  "cloudflare_url_base": "https://imagedelivery.net/account-hash/cf_xyz789",
+  "variants": ["w800", "w1280", "w1920", "w2560", "sq256", "sq512"],
+  "description": "Sample description",
+  "tags": ["nature", "landscape"],
+  "status": "active",
+  "is_public": false,
+  "metadata_status": "completed",
+  "updated_at": 1729785605000,
+  "deleted_at": null,
+  "_version": "1.0",
+  "_written_at": 1729785605000
+}
 ```
 
-**ID Generation (Deterministic):**
+**ID Generation (Content-Based, Deterministic):**
 ```typescript
-// Content-addressable ID based on Cloudflare Image ID + original filename
-const id = `img_${sha256(`${cloudflareImageId}:${originalFilename}`).slice(0, 16)}`;
+// Hash the actual image file content
+async function generateImageId(fileBuffer: ArrayBuffer): Promise<{
+  imageId: string;
+  contentHash: string;
+}> {
+  // Compute full SHA-256
+  const hashBuffer = await crypto.subtle.digest('SHA-256', fileBuffer);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  const contentHash = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+
+  // Use first 128 bits (32 hex chars) for ID
+  const imageId = `img_${contentHash.slice(0, 32)}`;
+
+  return { imageId, contentHash };
+}
+
+// Example result:
+// imageId: "img_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6" (36 chars total)
+// contentHash: "a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4..." (64 chars)
 ```
 
 **Write Operations:**
 ```typescript
-// Append complete record to R2 JSONL
-const date = new Date();
-const key = `images/${date.getFullYear()}/${String(date.getMonth() + 1).padStart(2, '0')}/${String(date.getDate()).padStart(2, '0')}/images.jsonl`;
+// Write complete record to R2 (simple, single write)
+const r2Key = `images/${imageId}.json`;
 
 const record = {
   id: imageId,
+  content_hash: contentHash,
   original_filename: originalFilename,
   cloudflare_image_id: cloudflareImageId,
-  // ... all metadata fields
+  // ... all metadata fields (EXIF + IPTC + C2PA)
   _version: '1.0',
   _written_at: Date.now()
 };
 
-// Append to existing file or create new
-const existingContent = await env.R2_BUCKET.get(key);
-const newLine = JSON.stringify(record) + '\n';
-
-if (existingContent) {
-  const existingText = await existingContent.text();
-  await env.R2_BUCKET.put(key, existingText + newLine);
-} else {
-  await env.R2_BUCKET.put(key, newLine);
-}
+// Single PUT operation - no append, no race conditions
+await env.R2_BUCKET.put(r2Key, JSON.stringify(record, null, 2));
 ```
 
 **Read Operations (Rebuild):**
@@ -162,119 +211,17 @@ async function rebuildFromR2(env: Env) {
 
   for (const obj of objects.objects) {
     const content = await env.R2_BUCKET.get(obj.key);
-    const text = await content.text();
-    const lines = text.split('\n').filter(line => line.trim());
+    const record = await content.json(); // Single JSON object per file
 
-    for (const line of lines) {
-      const record = JSON.parse(line);
-
-      // Idempotent insert
-      await env.DB.prepare(`
-        INSERT INTO images (id, original_filename, cloudflare_image_id, ...)
-        VALUES (?, ?, ?, ...)
-        ON CONFLICT(id) DO UPDATE SET
-          updated_at = excluded.updated_at,
-          metadata_status = excluded.metadata_status
-      `).bind(/* ... */).run();
-    }
+    // Idempotent insert
+    await env.DB.prepare(`
+      INSERT INTO images (id, content_hash, original_filename, cloudflare_image_id, ...)
+      VALUES (?, ?, ?, ?, ...)
+      ON CONFLICT(id) DO UPDATE SET
+        updated_at = excluded.updated_at,
+        metadata_status = excluded.metadata_status
+    `).bind(/* ... */).run();
   }
-}
-```
-
----
-
-### KV Storage (Hot-Path Cache)
-
-**Namespace:** `IMAGES_CACHE`
-
-**Purpose:** Cache frequently accessed data to reduce D1 queries
-
-**Cached Data:**
-
-**1. Recent Images (Global)**
-```typescript
-// Key: recent_images
-// TTL: 1 hour
-// Value: Array of last 20 uploaded images
-await env.IMAGES_CACHE.put(
-  'recent_images',
-  JSON.stringify([
-    { id: 'img_123', original_filename: 'photo.jpg', uploaded_at: '2025-10-24T12:00:00Z' },
-    // ... 19 more
-  ]),
-  { expirationTtl: 3600 }
-);
-```
-
-**2. User's Recent Images**
-```typescript
-// Key: recent_images:user:{userId}
-// TTL: 30 minutes
-// Value: Array of user's last 10 images
-await env.IMAGES_CACHE.put(
-  `recent_images:user:${userId}`,
-  JSON.stringify(userRecentImages),
-  { expirationTtl: 1800 }
-);
-```
-
-**3. Individual Image Cache**
-```typescript
-// Key: image:{imageId}
-// TTL: 1 hour
-// Value: Complete image record
-await env.IMAGES_CACHE.put(
-  `image:${imageId}`,
-  JSON.stringify(imageRecord),
-  { expirationTtl: 3600 }
-);
-```
-
-**4. Metadata Status Cache**
-```typescript
-// Key: metadata_status:{imageId}
-// TTL: 5 minutes (short TTL for processing status)
-// Value: Simple status string
-await env.IMAGES_CACHE.put(
-  `metadata_status:${imageId}`,
-  'completed',
-  { expirationTtl: 300 }
-);
-```
-
-**Cache Invalidation:**
-```typescript
-// When image is updated or deleted
-await env.IMAGES_CACHE.delete(`image:${imageId}`);
-await env.IMAGES_CACHE.delete(`metadata_status:${imageId}`);
-await env.IMAGES_CACHE.delete('recent_images');
-await env.IMAGES_CACHE.delete(`recent_images:user:${userId}`);
-```
-
-**Read Pattern (Cache-Aside):**
-```typescript
-async function getImage(imageId: string, env: Env) {
-  // Try cache first
-  const cached = await env.IMAGES_CACHE.get(`image:${imageId}`);
-  if (cached) {
-    return JSON.parse(cached);
-  }
-
-  // Cache miss - query D1
-  const image = await env.DB.prepare('SELECT * FROM images WHERE id = ?')
-    .bind(imageId)
-    .first();
-
-  if (image) {
-    // Write back to cache
-    await env.IMAGES_CACHE.put(
-      `image:${imageId}`,
-      JSON.stringify(image),
-      { expirationTtl: 3600 }
-    );
-  }
-
-  return image;
 }
 ```
 
@@ -288,6 +235,7 @@ async function getImage(imageId: string, env: Env) {
 CREATE TABLE images (
   -- Primary identification
   id TEXT PRIMARY KEY,
+  content_hash TEXT NOT NULL UNIQUE, -- Full SHA-256 hash for verification/deduplication
   original_filename TEXT NOT NULL,
   cloudflare_image_id TEXT NOT NULL UNIQUE,
 
@@ -335,6 +283,7 @@ CREATE TABLE images (
 );
 
 -- Indexes for common queries
+CREATE INDEX idx_images_content_hash ON images(content_hash);
 CREATE INDEX idx_images_cloudflare_id ON images(cloudflare_image_id);
 CREATE INDEX idx_images_uploaded_at ON images(uploaded_at);
 CREATE INDEX idx_images_status ON images(status);
@@ -361,6 +310,7 @@ import { sqliteTable, text, integer } from "drizzle-orm/sqlite-core";
 export const images = sqliteTable("images", {
   // Primary identification
   id: text("id").primaryKey(),
+  contentHash: text("content_hash").notNull().unique(), // Full SHA-256 for verification
   originalFilename: text("original_filename").notNull(),
   cloudflareImageId: text("cloudflare_image_id").notNull().unique(),
 
@@ -781,6 +731,180 @@ await db
 5. **Migration Support:** Built-in schema migration tools
 6. **Flexibility:** Can drop down to raw SQL when needed
 7. **Auto-completion:** IDE support for schema fields and queries
+
+---
+
+## Image URL Generation with HMAC Signing
+
+### Overview
+
+The API returns URLs that leverage your existing HMAC signing infrastructure (from `cf-images.txt`). URLs work differently for public vs private images.
+
+### URL Patterns
+
+**Public Images:**
+```
+https://eick.com/images/{cloudflare_image_id}/{variant}
+```
+- Handled by: Cloudflare Zone Rewrite (automatic, no Worker)
+- Rewrites to: `/cdn-cgi/imagedelivery/<ACCOUNT_HASH>/{cloudflare_image_id}/{variant}`
+- Caching: Maximum (unsigned, shared across all users)
+- Performance: Fastest (no Worker hop)
+
+**Private Images:**
+```
+https://eick.com/images-secure/{cloudflare_image_id}/{variant}
+```
+- Handled by: HMAC Signing Worker (`worker-images-signer.ts`)
+- Computes: HMAC signature with 30-day expiry bucket
+- Returns: 302 redirect to signed URL
+- Caching: 30-day bucket (signed URLs shared within bucket)
+
+### Supported Variants
+
+- **w800** - 800px width, scale-down
+- **w1280** - 1280px width, scale-down
+- **w1920** - 1920px width, scale-down
+- **w2560** - 2560px width, scale-down (hero/lightbox)
+- **sq256** - 256×256px square, cover crop
+- **sq512** - 512×512px square, cover crop
+
+### API Response Format
+
+**GET /api/v1/images/:id**
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": "img_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6",
+    "cloudflare_image_id": "083eb7b2-5392-4565-b69e-aff66acddd00",
+    "original_filename": "photo.jpg",
+    "is_public": false,
+    "variants": ["w800", "w1280", "w1920", "w2560", "sq256", "sq512"],
+    "urls": {
+      "w800": "https://eick.com/images-secure/083eb7b2-5392-4565-b69e-aff66acddd00/w800",
+      "w1280": "https://eick.com/images-secure/083eb7b2-5392-4565-b69e-aff66acddd00/w1280",
+      "w1920": "https://eick.com/images-secure/083eb7b2-5392-4565-b69e-aff66acddd00/w1920",
+      "w2560": "https://eick.com/images-secure/083eb7b2-5392-4565-b69e-aff66acddd00/w2560",
+      "sq256": "https://eick.com/images-secure/083eb7b2-5392-4565-b69e-aff66acddd00/sq256",
+      "sq512": "https://eick.com/images-secure/083eb7b2-5392-4565-b69e-aff66acddd00/sq512"
+    }
+  }
+}
+```
+
+### Implementation
+
+**URL Generation Logic:**
+```typescript
+function buildImageUrls(image: Image): Record<string, string> {
+  const variants = ['w800', 'w1280', 'w1920', 'w2560', 'sq256', 'sq512'];
+
+  // Choose prefix based on public/private flag
+  const urlPrefix = image.isPublic
+    ? 'https://eick.com/images'
+    : 'https://eick.com/images-secure';
+
+  // Generate URL for each variant
+  const urls: Record<string, string> = {};
+  for (const variant of variants) {
+    urls[variant] = `${urlPrefix}/${image.cloudflareImageId}/${variant}`;
+  }
+
+  return urls;
+}
+```
+
+**GET Endpoint with URLs:**
+```typescript
+router.get('/api/v1/images/:id', async (request, env) => {
+  const imageId = request.params.id;
+
+  const db = connectD1(env.DB);
+  const image = await db
+    .select()
+    .from(images)
+    .where(eq(images.id, imageId))
+    .limit(1);
+
+  if (!image.length) {
+    return Response.json(
+      { success: false, error: 'Image not found' },
+      { status: 404 }
+    );
+  }
+
+  const record = image[0];
+  const urls = buildImageUrls(record);
+
+  return Response.json({
+    success: true,
+    data: {
+      id: record.id,
+      cloudflare_image_id: record.cloudflareImageId,
+      original_filename: record.originalFilename,
+      is_public: record.isPublic,
+      variants: ['w800', 'w1280', 'w1920', 'w2560', 'sq256', 'sq512'],
+      urls: urls,
+      mime_type: record.mimeType,
+      file_size: record.fileSize,
+      width: record.width,
+      height: record.height,
+      uploaded_at: record.uploadedAt.toISOString(),
+      // Include metadata if requested
+      exif_data: record.exifData ? JSON.parse(record.exifData) : null,
+      iptc_data: record.iptcData ? JSON.parse(record.iptcData) : null,
+      c2pa_manifest: record.c2paManifest ? JSON.parse(record.c2paManifest) : null,
+      c2pa_verified: record.c2paVerified,
+    }
+  });
+});
+```
+
+### Client Usage
+
+**Browser:**
+```html
+<img
+  src="https://eick.com/images-secure/083eb7b2.../w1280"
+  srcset="
+    https://eick.com/images-secure/083eb7b2.../w800 800w,
+    https://eick.com/images-secure/083eb7b2.../w1280 1280w,
+    https://eick.com/images-secure/083eb7b2.../w1920 1920w
+  "
+  sizes="(min-width: 1400px) 1300px, (min-width: 900px) 85vw, 95vw"
+  alt="Photo">
+```
+
+**Request Flow (Private Image):**
+```
+1. Browser requests: https://eick.com/images-secure/083eb7b2.../w1280
+2. HMAC Worker signs request (30-day bucket)
+3. 302 redirect to: https://imagedelivery.net/.../w1280?exp=...&sig=...
+4. Browser follows redirect
+5. Cloudflare Images validates signature and serves image
+6. Image cached at edge with 30-day TTL
+```
+
+### Benefits
+
+- ✅ **Leverages existing infrastructure** - Uses deployed HMAC Worker
+- ✅ **No signing in API** - API just returns URLs, Worker handles signing
+- ✅ **Secure** - Signing key only in dedicated Worker
+- ✅ **Cacheable** - 30-day bucket URLs share cache
+- ✅ **Fast** - Public images bypass Worker entirely (zone rewrite)
+- ✅ **Flexible** - Easy to switch image between public/private
+
+### Zone Rewrite Configuration (Public Images)
+
+**Cloudflare Dashboard → Rules → Page Rules:**
+```
+If Path: /images/*
+Then Rewrite: /cdn-cgi/imagedelivery/<ACCOUNT_HASH>/${1}
+```
+
+**No Worker needed** - Zone rewrite happens automatically.
 
 ---
 
@@ -1459,38 +1583,44 @@ Extracting image metadata (EXIF, IPTC, C2PA) in Cloudflare Workers presents uniq
 
 ### Implementation Strategies
 
-#### Strategy 1: Deferred Processing (⭐ RECOMMENDED)
+#### Strategy 1: Deferred Processing with Cloudflare Containers (⭐ RECOMMENDED)
 
-Upload to Cloudflare Images first, then extract ALL metadata asynchronously.
+Upload to Cloudflare Images first, then extract ALL metadata asynchronously (including C2PA via Golang container).
 
 **Flow:**
 1. Upload image to Cloudflare Images
 2. Store basic record in D1 (ID, filename, Cloudflare ID, file size, MIME type)
 3. Queue metadata extraction job
-4. Return immediately with image ID and Cloudflare URLs
-5. Background worker extracts EXIF, IPTC, C2PA and updates database
+4. Return immediately with image ID and URLs
+5. Background worker extracts ALL metadata in single job:
+   - EXIF + IPTC (fast, in Worker using exifr library ~50KB)
+   - C2PA (call Golang container via Durable Object binding)
+6. Write complete record to R2 (single write with all metadata)
+7. Update D1 (idempotent)
 
 **Pros:**
-- **Simplest architecture** - single code path for all images
-- **Fast, consistent response times** - no variability based on file size
+- **No bundle size limits** - C2PA in separate container
+- **Native performance** - Golang runs natively, not WASM
+- **Single R2 write** - all metadata written together (immutable)
+- **Fast upload response** - no variability based on file size
 - **No Worker timeout concerns** - upload completes in milliseconds
-- **Images immediately available** - variants ready for use on web
-- **Handles any file size** - no memory or CPU constraints
-- **Easier to maintain** - clear separation of concerns
+- **Images immediately available** - variants ready for use
+- **Simpler architecture** - single queue, single worker
 
 **Cons:**
-- Metadata not immediately available (typically ready within seconds)
-- Requires Queue infrastructure (Cloudflare Queues)
+- Metadata not immediately available (typically ready within 1-5 seconds)
+- Requires Cloudflare Containers (beta, paid plan)
+- Requires Cloudflare Queues
 - Client must handle "metadata processing" state
 
 **Why This is Best:**
+- Solves C2PA bundle size problem elegantly
 - Users care most about fast uploads and image availability
 - Metadata is "nice to have" and rarely needed immediately
-- Simplifies error handling (retry metadata extraction independently)
+- Single R2 write = truly immutable storage
 - Easier to test and debug
-- Better performance characteristics
 
-**Best for:** ✅ **ALL use cases** - this should be your default approach
+**Best for:** ✅ **ALL use cases with C2PA** - recommended default
 
 ---
 
@@ -1851,20 +1981,9 @@ export default {
           _written_at: now
         };
 
-        // [1] Write to R2 (SOURCE OF TRUTH) - JSONL append
-        const date = new Date();
-        const r2Key = `images/${date.getFullYear()}/${String(date.getMonth() + 1).padStart(2, '0')}/${String(date.getDate()).padStart(2, '0')}/images.jsonl`;
-
-        const jsonLine = JSON.stringify(completeRecord) + '\n';
-
-        // Append to existing JSONL or create new
-        const existingR2 = await env.R2_BUCKET.get(r2Key);
-        if (existingR2) {
-          const existingText = await existingR2.text();
-          await env.R2_BUCKET.put(r2Key, existingText + jsonLine);
-        } else {
-          await env.R2_BUCKET.put(r2Key, jsonLine);
-        }
+        // [1] Write to R2 (SOURCE OF TRUTH) - One JSON file per image
+        const r2Key = `images/${job.imageId}.json`;
+        await env.R2_BUCKET.put(r2Key, JSON.stringify(completeRecord, null, 2));
 
         // [2] Update D1 (INDEXED VIEW) - Idempotent
         await env.DB.prepare(`
@@ -1917,27 +2036,6 @@ export default {
           now,
           null
         ).run();
-
-        // [3] Update KV Cache (HOT-PATH OPTIMIZATION)
-        // Cache the complete record
-        await env.IMAGES_CACHE.put(
-          `image:${job.imageId}`,
-          JSON.stringify(completeRecord),
-          { expirationTtl: 3600 } // 1 hour
-        );
-
-        // Update metadata status cache
-        await env.IMAGES_CACHE.put(
-          `metadata_status:${job.imageId}`,
-          'completed',
-          { expirationTtl: 300 } // 5 minutes
-        );
-
-        // Invalidate recent images caches (they'll be rebuilt on next read)
-        await env.IMAGES_CACHE.delete('recent_images');
-        if (originalRecord.uploaded_by) {
-          await env.IMAGES_CACHE.delete(`recent_images:user:${originalRecord.uploaded_by}`);
-        }
 
         // Optional: Trigger webhook
         if (env.WEBHOOK_URL) {
@@ -2150,17 +2248,15 @@ async function safeMetadataExtraction(buffer: ArrayBuffer) {
    - Extract ALL metadata in single worker:
      - EXIF data (camera, settings, GPS)
      - IPTC data (copyright, creator, keywords)
-     - C2PA manifest (content authenticity)
-   - **[1] Write complete record to R2** (SOURCE OF TRUTH)
+     - C2PA manifest via Cloudflare Container (Golang)
+   - **[1] Write complete record to R2** (SOURCE OF TRUTH - one JSON file per image)
    - **[2] Update D1 with idempotent INSERT/UPDATE** (INDEXED VIEW)
-   - **[3] Update KV cache** (HOT-PATH OPTIMIZATION)
    - Optional: Trigger webhook when complete
    - ⏱️ **Typical processing time: 1-5 seconds**
 
 3. **Read Endpoint:**
-   - Check KV cache first (hot path)
-   - If cache miss, query D1
-   - Update KV cache on read (cache-aside pattern)
+   - Query D1 directly for image record
+   - Build URLs based on is_public flag
    - Return image data with metadata (if available)
    - Include `metadata_status` field: 'pending', 'processing', 'completed', 'failed'
    - Client can poll or use webhooks for status updates
@@ -2174,15 +2270,17 @@ async function safeMetadataExtraction(buffer: ArrayBuffer) {
 
 1. POST /api/v1/images
    ↓
-2. Upload to Cloudflare Images → Get image ID + variants
+2. Generate content-based ID: sha256(file_content) → img_[32 hex chars]
    ↓
-3. Generate deterministic ID: sha256(cloudflare_id:filename)
+3. Check D1 for duplicate (by content_hash)
    ↓
-4. INSERT basic record into D1 (metadata_status = 'pending')
+4. Upload to Cloudflare Images (if new)
    ↓
-5. Queue.send({ imageId, cloudflareImageId, originalFilename })
+5. INSERT basic record into D1 (metadata_status = 'pending')
    ↓
-6. Return 201 with image ID + URLs (< 500ms)
+6. Queue.send({ imageId, cloudflareImageId, originalFilename })
+   ↓
+7. Return 201 with image ID + URLs (< 500ms)
 
 ┌─────────────────────────────────────────────────────────────────┐
 │                   METADATA EXTRACTION PHASE                      │
@@ -2194,19 +2292,17 @@ Queue Worker receives job:
    ↓
 2. Fetch image from Cloudflare Images
    ↓
-3. Extract EXIF + IPTC + C2PA in parallel
+3. Extract EXIF + IPTC (in Worker) and C2PA (via Golang Container)
    ↓
 4. Build complete record with all metadata
    ↓
-5. [R2] Append complete record to JSONL (images/YYYY/MM/DD/images.jsonl)
+5. [R2] Write complete record to JSON file (images/{imageId}.json)
    ↓
 6. [D1] INSERT ... ON CONFLICT DO UPDATE (idempotent)
    ↓
-7. [KV] Write to cache with TTL
+7. Trigger webhook (optional)
    ↓
-8. Trigger webhook (optional)
-   ↓
-9. ACK message
+8. ACK message
 
 ┌─────────────────────────────────────────────────────────────────┐
 │                         READ PHASE                              │
@@ -2214,17 +2310,11 @@ Queue Worker receives job:
 
 GET /api/v1/images/:id
    ↓
-1. Check KV cache: image:{id}
-   │
-   ├─ Cache HIT → Return cached data (< 10ms)
-   │
-   └─ Cache MISS:
-      ↓
-      2. Query D1 for image record
-         ↓
-      3. Update KV cache with result
-         ↓
-      4. Return image data (< 50ms)
+1. Query D1 for image record
+   ↓
+2. Build URLs based on is_public flag
+   ↓
+3. Return image data with URLs (< 50ms)
 ```
 
 **Architecture Benefits:**
@@ -2232,12 +2322,13 @@ GET /api/v1/images/:id
 - **Simple:** Single code path, easy to reason about
 - **Fast:** Upload response in milliseconds, not seconds
 - **Durable:** R2 provides 11 nines durability
-- **Recoverable:** Can rebuild D1/KV entirely from R2
+- **Recoverable:** Can rebuild D1 entirely from R2
 - **Reliable:** No Worker timeout issues
-- **Scalable:** Queue handles burst traffic, KV absorbs read load
+- **Scalable:** Queue handles burst traffic, D1 handles read queries efficiently
 - **Debuggable:** Can retry metadata extraction independently
 - **Testable:** Easy to test upload and extraction separately
-- **Idempotent:** Replays are safe with deterministic IDs
+- **Idempotent:** Replays are safe with content-based deterministic IDs
+- **Deduplication:** Content-hash prevents storing duplicates
 
 ### Testing Metadata Extraction
 
@@ -2302,6 +2393,260 @@ test('extracts EXIF from JPEG', async () => {
 1. Upload → Store basic record → Queue job → Return immediately
 2. Queue worker fetches image and extracts all metadata
 3. Client polls for metadata or uses webhooks
+
+---
+
+## Cloudflare Containers for C2PA Verification
+
+### Overview
+
+C2PA verification is handled by a **Golang HTTP service** running in a Cloudflare Container. This solves the bundle size problem (C2PA library is ~1MB+) while keeping everything in the Cloudflare ecosystem.
+
+### Architecture
+
+```
+Metadata Queue Worker (TypeScript)
+  ↓
+Extracts EXIF + IPTC (fast, ~50KB library)
+  ↓
+Calls C2PA Container via Durable Object binding
+  ↓
+Golang Container (C2PA Verification Service)
+  ↓
+Returns C2PA manifest + verification result
+  ↓
+Worker writes complete record to R2 + D1
+```
+
+### wrangler.toml Configuration
+
+```toml
+# Existing config
+name = "api"
+main = "src/index.ts"
+compatibility_date = "2025-10-23"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "app_db"
+database_id = "your-database-id"
+
+[[r2_buckets]]
+binding = "R2_BUCKET"
+bucket_name = "images-metadata"
+
+[[queues.producers]]
+binding = "METADATA_QUEUE"
+queue = "image-metadata-processing"
+
+# NEW: Cloudflare Container for C2PA
+[[containers]]
+max_instances = 10
+class_name = "C2PAVerifier"
+image = "./c2pa-container/Dockerfile"
+
+[[durable_objects.bindings]]
+name = "C2PA_CONTAINER"
+class_name = "C2PAVerifier"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["C2PAVerifier"]
+```
+
+### Golang C2PA Container
+
+**Directory structure:**
+```
+apps/
+├── api/                    # Main Worker
+│   ├── src/index.ts
+│   └── wrangler.toml
+└── c2pa-container/         # Golang C2PA service
+    ├── Dockerfile
+    ├── main.go
+    ├── go.mod
+    └── go.sum
+```
+
+**Dockerfile:**
+```dockerfile
+FROM golang:1.21-alpine AS builder
+WORKDIR /app
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . .
+RUN go build -o c2pa-verifier .
+
+FROM alpine:latest
+RUN apk --no-cache add ca-certificates
+COPY --from=builder /app/c2pa-verifier /usr/local/bin/
+EXPOSE 8080
+CMD ["c2pa-verifier"]
+```
+
+**main.go:**
+```go
+package main
+
+import (
+    "encoding/json"
+    "io"
+    "log"
+    "net/http"
+)
+
+type VerifyRequest struct {
+    ImageData []byte `json:"image_data"`
+}
+
+type VerifyResponse struct {
+    Verified       bool                   `json:"verified"`
+    SignatureValid bool                   `json:"signature_valid"`
+    Issuer         string                 `json:"issuer"`
+    Manifest       map[string]interface{} `json:"manifest"`
+}
+
+func verifyHandler(w http.ResponseWriter, r *http.Request) {
+    var req VerifyRequest
+    if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+        http.Error(w, err.Error(), http.StatusBadRequest)
+        return
+    }
+
+    // Use C2PA Go library (example - use actual library)
+    // import "github.com/contentauth/c2pa-go"
+    manifest, verified := verifyC2PA(req.ImageData)
+
+    result := VerifyResponse{
+        Verified:       verified,
+        SignatureValid: verified,
+        Issuer:         manifest["issuer"].(string),
+        Manifest:       manifest,
+    }
+
+    w.Header().Set("Content-Type", "application/json")
+    json.NewEncoder(w).Encode(result)
+}
+
+func verifyC2PA(imageData []byte) (map[string]interface{}, bool) {
+    // TODO: Implement actual C2PA verification
+    // This is a placeholder
+    return map[string]interface{}{
+        "issuer": "Adobe Content Credentials",
+        "claim_generator": "Adobe Photoshop",
+    }, true
+}
+
+func main() {
+    http.HandleFunc("/verify", verifyHandler)
+    log.Println("C2PA verifier listening on :8080")
+    log.Fatal(http.ListenAndServe(":8080", nil))
+}
+```
+
+**go.mod:**
+```go
+module c2pa-verifier
+
+go 1.21
+
+// Add C2PA library dependency here
+// require github.com/contentauth/c2pa-go v0.x.x
+```
+
+### Queue Worker Implementation
+
+**Calling the C2PA Container:**
+```typescript
+export default {
+  async queue(batch: MessageBatch, env: Env) {
+    for (const message of batch.messages) {
+      const { imageId, cloudflareImageId } = message.body;
+
+      // Fetch image from Cloudflare Images
+      const imageUrl = `https://imagedelivery.net/${env.CF_ACCOUNT_HASH}/${cloudflareImageId}/public`;
+      const response = await fetch(imageUrl);
+      const arrayBuffer = await response.arrayBuffer();
+
+      // Extract EXIF + IPTC in parallel (fast)
+      const [exif, iptc] = await Promise.all([
+        exifr.parse(arrayBuffer, { exif: true, gps: true }),
+        exifr.parse(arrayBuffer, { iptc: true })
+      ]);
+
+      // Call C2PA Container
+      const containerId = env.C2PA_CONTAINER.idFromName('c2pa-verifier');
+      const containerStub = env.C2PA_CONTAINER.get(containerId);
+
+      const c2paResponse = await containerStub.fetch('http://container/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          image_data: Array.from(new Uint8Array(arrayBuffer))
+        })
+      });
+
+      const c2paData = await c2paResponse.json();
+
+      // Build complete record
+      const completeRecord = {
+        id: imageId,
+        exif_data: exif,
+        iptc_data: iptc,
+        c2pa_manifest: c2paData.manifest,
+        c2pa_verified: c2paData.verified,
+        c2pa_signature_valid: c2paData.signature_valid,
+        c2pa_issuer: c2paData.issuer,
+        metadata_status: 'completed'
+      };
+
+      // [R2] Write complete record (single write)
+      await env.R2_BUCKET.put(
+        `images/${imageId}.json`,
+        JSON.stringify(completeRecord)
+      );
+
+      // [D1] Update (idempotent)
+      const db = connectD1(env.DB);
+      await db.insert(images).values(completeRecord).onConflictDoUpdate({
+        target: images.id,
+        set: completeRecord
+      });
+
+      message.ack();
+    }
+  }
+};
+```
+
+### Deployment
+
+```bash
+# Deploy everything together
+npx wrangler deploy
+
+# Wrangler will:
+# 1. Build Golang Docker image from Dockerfile
+# 2. Push image to Cloudflare Container Registry
+# 3. Deploy Worker with container binding
+# 4. Provision Durable Objects
+```
+
+### Benefits
+
+- ✅ **No bundle size limits** - Container is separate from Worker
+- ✅ **Native performance** - Golang runs natively, not WASM
+- ✅ **Edge deployment** - Runs on Cloudflare's global network
+- ✅ **Simple deployment** - `wrangler deploy` handles everything
+- ✅ **Stays in Cloudflare** - No external services needed
+- ✅ **Programmable** - Worker controls container lifecycle
+
+### Requirements
+
+- **Cloudflare Workers Paid Plan** (~$5/month base)
+- **Cloudflare Containers** (public beta)
+- **Docker** installed locally for building images
 
 ---
 
