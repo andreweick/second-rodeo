@@ -30,6 +30,18 @@ db:
 types:
     pnpm --filter api run cf-typegen
 
+# Run API tests
+test:
+    pnpm --filter api test --run
+
+# Run API tests in watch mode
+test-watch:
+    pnpm --filter api test --watch
+
+# Check TypeScript types in API
+ts-check:
+    cd apps/api && npx tsc --noEmit && npx tsc --noEmit -p test/tsconfig.json
+
 # Run all apps in parallel
 dev-all:
     pnpm --parallel --filter api --filter apps-web --filter astro-paper dev

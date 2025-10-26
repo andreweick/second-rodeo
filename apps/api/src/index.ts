@@ -1,15 +1,24 @@
-import { connectD1 } from './db/client';
+import type { Env } from './types/env';
+import { handleHttp } from './handlers/http';
+import { handleQueue } from './handlers/queue';
 
+/**
+ * Cloudflare Worker entry point
+ * Exports handlers for HTTP requests and queue message processing
+ */
 export default {
-	async fetch(request: Request, env: { DB: D1Database }): Promise<Response> {
-		const url = new URL(request.url);
-
-		if (url.pathname === '/health') {
-			return new Response(JSON.stringify({ ok: true, ts: Date.now() }), {
-				headers: { 'content-type': 'application/json; charset=utf-8' },
-			});
-		}
-
-		return new Response('ok');
+	/**
+	 * HTTP request handler
+	 */
+	async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+		return handleHttp(request, env);
 	},
-} satisfies ExportedHandler<{ DB: D1Database }>;
+
+	/**
+	 * Queue message batch handler
+	 * Cloudflare calls this automatically when messages are ready to process
+	 */
+	async queue(batch: MessageBatch, env: Env): Promise<void> {
+		await handleQueue(batch, env);
+	},
+} satisfies ExportedHandler<Env>;
