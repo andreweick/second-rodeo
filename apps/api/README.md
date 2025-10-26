@@ -4,7 +4,8 @@ Cloudflare Worker application with HTTP endpoints and queue processing for JSON 
 
 ## Features
 
-- **HTTP Handler**: Health check endpoint and basic request handling
+- **HTTP Handler**: Health check endpoint and image upload API
+- **Image Upload API**: Upload images to Cloudflare Images with authentication and validation
 - **Queue Consumer**: Processes messages from Cloudflare Queue to read and validate JSON files from R2
 - **R2 Integration**: Reads JSON files from the `sr-json` bucket
 - **D1 Database**: Connected to `app_db` for data storage
@@ -15,17 +16,92 @@ Cloudflare Worker application with HTTP endpoints and queue processing for JSON 
 src/
 ├── index.ts              # Worker entry point (exports fetch and queue handlers)
 ├── types/
-│   └── env.ts           # Environment bindings (DB, SR_JSON, SR_ARTIFACT)
+│   └── env.ts           # Environment bindings (DB, SR_JSON, SR_ARTIFACT, CF Images)
 ├── handlers/
-│   ├── http.ts          # HTTP request handler
+│   ├── http.ts          # HTTP request handler (health check, image upload)
 │   └── queue.ts         # Queue message batch handler
 └── services/
+    ├── image-upload.ts  # Image upload to Cloudflare Images with validation
     └── json-processor.ts # R2 read, JSON parse, and validation logic
 
 test/
 ├── index.spec.ts        # HTTP handler tests
+├── image-upload.spec.ts # Image upload API tests
 └── queue.spec.ts        # Queue handler tests (6 scenarios)
 ```
+
+## API Endpoints
+
+### Development Configuration
+
+0. Generate AUTH_TOKEN for Bearer
+This generates a 256-bit (32 byte) random token encoded in base64, which will be 44 characters long. It's cryptographically secure and perfect for a bearer token.
+
+	```sh
+	openssl rand -base64 32
+	```
+
+1. Update your Cloudflare Account ID in wrangler.jsonc:
+"vars": {
+  "CLOUDFLARE_ACCOUNT_ID": "your-actual-account-id"
+}
+2. Set secrets (for production):
+
+```sh
+pnpm --filter api exec wrangler secret put CLOUDFLARE_MEDIA_TOKEN
+pnpm --filter api exec wrangler secret put AUTH_TOKEN
+```
+3. For local testing, create .dev.vars file in apps/api/:
+CLOUDFLARE_MEDIA_TOKEN=your-media-token
+AUTH_TOKEN=your-test-auth-token
+4. Deploy:
+cd apps/api
+pnpm deploy
+
+### POST /images
+
+Upload an image to Cloudflare Images.
+
+**Authentication**: Requires `Authorization: Bearer <AUTH_TOKEN>` header
+
+**Request**:
+- Method: `POST`
+- Content-Type: `multipart/form-data`
+- Body: Form field named `file` containing the image
+
+**Supported Image Types**:
+- `image/jpeg`
+- `image/png`
+- `image/gif`
+- `image/webp`
+
+**Example using curl**:
+```bash
+curl -X POST https://your-worker.workers.dev/images \
+  -H "Authorization: Bearer your-auth-token" \
+  -F "file=@/path/to/image.jpg"
+```
+
+**Success Response** (201 Created):
+```json
+{
+  "success": true,
+  "result": {
+    "id": "2cdc28f0-017a-49c4-9ed7-87056c83901",
+    "filename": "image.jpg",
+    "uploaded": "2025-10-26T12:00:00.000Z",
+    "requireSignedURLs": false,
+    "variants": [
+      "https://imagedelivery.net/account-hash/2cdc28f0-017a-49c4-9ed7-87056c83901/public"
+    ]
+  }
+}
+```
+
+**Error Responses**:
+- `401 Unauthorized`: Missing or invalid authentication token
+- `400 Bad Request`: Invalid file type or missing file
+- `500 Internal Server Error`: Cloudflare Images API error
 
 ## Development
 
@@ -182,6 +258,33 @@ Configured in `wrangler.jsonc`:
 - `DB` - D1 database (`app_db`)
 - `SR_JSON` - R2 bucket for JSON files
 - `SR_ARTIFACT` - R2 bucket for artifacts
+- `CLOUDFLARE_ACCOUNT_ID` - Your Cloudflare account ID (variable)
+- `CLOUDFLARE_MEDIA_TOKEN` - Cloudflare Media API token (secret)
+- `AUTH_TOKEN` - API authentication token (secret)
+
+### Setting Up Environment Variables
+
+1. **Update `wrangler.jsonc`** with your Cloudflare Account ID:
+   ```json
+   "vars": {
+     "CLOUDFLARE_ACCOUNT_ID": "your-account-id-here"
+   }
+   ```
+
+2. **Set secrets** using Wrangler CLI:
+   ```bash
+   # Set Cloudflare Media API token (create at dash.cloudflare.com with Images:Edit permission)
+   wrangler secret put CLOUDFLARE_MEDIA_TOKEN
+
+   # Set API authentication token (generate a random secure string)
+   wrangler secret put AUTH_TOKEN
+   ```
+
+3. **For local development**, create `.dev.vars` file:
+   ```
+   CLOUDFLARE_MEDIA_TOKEN=your-media-token
+   AUTH_TOKEN=your-auth-token
+   ```
 
 ---
 

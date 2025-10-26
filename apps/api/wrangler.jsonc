@@ -7,6 +7,8 @@
 	"name": "api",
 	"main": "src/index.ts",
 	"compatibility_date": "2025-10-23",
+	"workers_dev": true,
+	"preview_urls": true,
 	"observability": {
 		"enabled": true,
 	},
@@ -43,7 +45,9 @@
 	 * Environment Variables
 	 * https://developers.cloudflare.com/workers/wrangler/configuration/#environment-variables
 	 */
-	// "vars": { "MY_VARIABLE": "production_value" }
+	"vars": {
+		"CLOUDFLARE_ACCOUNT_ID": "5930846a5870031c415bb26e42e38833",
+	},
 	/**
 	 * Note: Use secrets to store sensitive data.
 	 * https://developers.cloudflare.com/workers/configuration/secrets/

@@ -45,3 +45,32 @@ ts-check:
 # Run all apps in parallel
 dev-all:
     pnpm --parallel --filter api --filter apps-web --filter astro-paper dev
+
+deploy-api:
+    pnpm --filter api run deploy
+
+# Sync AUTH_TOKEN from .dev.vars to production
+sync-auth-token:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    AUTH_TOKEN=$(grep 'AUTH_TOKEN=' apps/api/.dev.vars | cut -d= -f2- | tr -d ' \n')
+    echo "Setting production AUTH_TOKEN to: $AUTH_TOKEN"
+    echo "$AUTH_TOKEN" | pnpm --filter api exec wrangler secret put AUTH_TOKEN
+
+# Test image upload against local dev server
+curl-image IMAGE_PATH:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    AUTH_TOKEN=$(grep 'AUTH_TOKEN=' apps/api/.dev.vars | cut -d= -f2- | tr -d ' \n')
+    curl -X POST http://localhost:8787/images \
+      -H "Authorization: Bearer $AUTH_TOKEN" \
+      -F "file=@{{IMAGE_PATH}}"
+
+# Test image upload against production
+curl-image-prod IMAGE_PATH:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    AUTH_TOKEN=$(grep 'AUTH_TOKEN=' apps/api/.dev.vars | cut -d= -f2- | tr -d ' \n')
+    curl -X POST https://api.missionfocus.workers.dev/images \
+      -H "Authorization: Bearer $AUTH_TOKEN" \
+      -F "file=@{{IMAGE_PATH}}"
