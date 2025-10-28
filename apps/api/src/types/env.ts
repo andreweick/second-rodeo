@@ -18,16 +18,6 @@ export interface Env {
 	SR_ARTIFACT: R2Bucket;
 
 	/**
-	 * Cloudflare Account ID for Images API
-	 */
-	CLOUDFLARE_ACCOUNT_ID: string;
-
-	/**
-	 * Cloudflare Media API token (secret)
-	 */
-	CLOUDFLARE_MEDIA_TOKEN: string;
-
-	/**
 	 * Authentication token for API endpoints (secret)
 	 */
 	AUTH_TOKEN: string;

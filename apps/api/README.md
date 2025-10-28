@@ -34,6 +34,9 @@ test/
 
 ### Development Configuration
 
+	pnpm config set store-dir ~/.pnpm-store
+	pnpm add  --filter api --store-dir ~/.pnpm-store iconv-lite
+
 0. Generate AUTH_TOKEN for Bearer
 This generates a 256-bit (32 byte) random token encoded in base64, which will be 44 characters long. It's cryptographically secure and perfect for a bearer token.
 

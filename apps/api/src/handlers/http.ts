@@ -25,15 +25,10 @@ export async function handleHttp(request: Request, env: Env): Promise<Response> 
 			});
 		}
 
-		// Upload image
+		// Upload image with metadata extraction
 		try {
-			const cfResponse = await uploadImage(request, env);
-			const responseBody = await cfResponse.text();
-
-			return new Response(responseBody, {
-				status: 201,
-				headers: { 'content-type': 'application/json; charset=utf-8' },
-			});
+			const response = await uploadImage(request, env);
+			return response;
 		} catch (error) {
 			if (error instanceof ImageUploadError) {
 				return new Response(JSON.stringify({ error: error.message }), {
