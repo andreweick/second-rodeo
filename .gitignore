@@ -12,11 +12,17 @@ apps/**/.vercel/
 apps/**/.netlify/
 apps/**/.output/
 
+# App-specific generated files
+apps/**/public/pagefind/
+
 # Local env + secrets
 *.local
 .env
 .env.*
 !.env.example
+.dev.vars
+.dev.vars.*
+!.dev.vars.example
 
 # Wrangler local state (D1, KV, etc.)
 **/.wrangler/
@@ -40,3 +46,17 @@ npm-debug.log*
 pnpm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
+# Test coverage
+coverage/
+*.lcov
+.nyc_output/
+
+# TypeScript
+*.tsbuildinfo
+
+# Cache directories
+.cache/
+.parcel-cache/
+.eslintcache
+.stylelintcache

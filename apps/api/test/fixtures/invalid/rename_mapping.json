@@ -1,0 +1,260 @@
+[
+  {
+    "old_name": "12night.jsonl",
+    "new_name": "sha256_adee2bf5481c2427bd190e1855a77a3ef378491cd5e7157339445ecec9e32666.jsonl",
+    "work_id": "12night",
+    "hash": "adee2bf5481c2427bd190e1855a77a3ef378491cd5e7157339445ecec9e32666"
+  }
+  {
+    "old_name": "allswell.jsonl",
+    "new_name": "sha256_b48d4d41ef83c6ad2a797faba087ae8fd427072c662926d5d695dc9a6c5d24f9.jsonl",
+    "work_id": "allswell",
+    "hash": "b48d4d41ef83c6ad2a797faba087ae8fd427072c662926d5d695dc9a6c5d24f9"
+  }
+  {
+    "old_name": "antonycleo.jsonl",
+    "new_name": "sha256_101eb5b5b0184c40752d371e30e3d0d5c91f15798250b16533beae27dabc9581.jsonl",
+    "work_id": "antonycleo",
+    "hash": "101eb5b5b0184c40752d371e30e3d0d5c91f15798250b16533beae27dabc9581"
+  }
+  {
+    "old_name": "asyoulikeit.jsonl",
+    "new_name": "sha256_d3141c35c52750885fded4d498b86d8623176b13dcf295e613c8105c7f6daf8c.jsonl",
+    "work_id": "asyoulikeit",
+    "hash": "d3141c35c52750885fded4d498b86d8623176b13dcf295e613c8105c7f6daf8c"
+  },
+  {
+    "old_name": "comedyerrors.jsonl",
+    "new_name": "sha256_1b6e34e45637a05351ee66569ebc07bf99d34437a91a57aedd966fc877df435f.jsonl",
+    "work_id": "comedyerrors",
+    "hash": "1b6e34e45637a05351ee66569ebc07bf99d34437a91a57aedd966fc877df435f"
+  },
+  {
+    "old_name": "coriolanus.jsonl",
+    "new_name": "sha256_265e2d4748ba48975fcf9aade2d8c90643f84374586a7f2e2e769784c0ade15a.jsonl",
+    "work_id": "coriolanus",
+    "hash": "265e2d4748ba48975fcf9aade2d8c90643f84374586a7f2e2e769784c0ade15a"
+  },
+  {
+    "old_name": "cymbeline.jsonl",
+    "new_name": "sha256_48955b92e40dcadf49a2dc8d18218d582e94fe9b1b16ec108d102a0abecaebe8.jsonl",
+    "work_id": "cymbeline",
+    "hash": "48955b92e40dcadf49a2dc8d18218d582e94fe9b1b16ec108d102a0abecaebe8"
+  },
+  {
+    "old_name": "hamlet.jsonl",
+    "new_name": "sha256_440369c78c353278146551200b4f3d5ade06ce356ff39fbde10a89cc867d37d4.jsonl",
+    "work_id": "hamlet",
+    "hash": "440369c78c353278146551200b4f3d5ade06ce356ff39fbde10a89cc867d37d4"
+  },
+  {
+    "old_name": "henry4p1.jsonl",
+    "new_name": "sha256_e97ffe64b85640421aaf91259f079799402ff29f8a4a75a848a0f2ddfeecef74.jsonl",
+    "work_id": "henry4p1",
+    "hash": "e97ffe64b85640421aaf91259f079799402ff29f8a4a75a848a0f2ddfeecef74"
+  },
+  {
+    "old_name": "henry4p2.jsonl",
+    "new_name": "sha256_3809f48d17908a53724c59a5eef8bce598e2825325edc27a2acbb32de1ee8a02.jsonl",
+    "work_id": "henry4p2",
+    "hash": "3809f48d17908a53724c59a5eef8bce598e2825325edc27a2acbb32de1ee8a02"
+  },
+  {
+    "old_name": "henry5.jsonl",
+    "new_name": "sha256_8c374e928eacd4423ec73fc62bb29d12118f9eedacc791f500d559c87fe8f0b8.jsonl",
+    "work_id": "henry5",
+    "hash": "8c374e928eacd4423ec73fc62bb29d12118f9eedacc791f500d559c87fe8f0b8"
+  },
+  {
+    "old_name": "henry6p1.jsonl",
+    "new_name": "sha256_ad165558585ab65d1fd52f3511e2988db033199526ff6c0f3f1bd7d027df733a.jsonl",
+    "work_id": "henry6p1",
+    "hash": "ad165558585ab65d1fd52f3511e2988db033199526ff6c0f3f1bd7d027df733a"
+  },
+  {
+    "old_name": "henry6p2.jsonl",
+    "new_name": "sha256_8e06fcece97051353d4d330aa4dd047590dff68e50a577ff703bc36e8e4a4967.jsonl",
+    "work_id": "henry6p2",
+    "hash": "8e06fcece97051353d4d330aa4dd047590dff68e50a577ff703bc36e8e4a4967"
+  },
+  {
+    "old_name": "henry6p3.jsonl",
+    "new_name": "sha256_527958567e3e5a6cab909b88f08838e385c6a84fa1e3aebe4efe03cd0a68c4d9.jsonl",
+    "work_id": "henry6p3",
+    "hash": "527958567e3e5a6cab909b88f08838e385c6a84fa1e3aebe4efe03cd0a68c4d9"
+  },
+  {
+    "old_name": "henry8.jsonl",
+    "new_name": "sha256_936216eed496ef7d077fd68a3fe00c1b7c6dd44f5c556f3e21cf7bc7df36b09a.jsonl",
+    "work_id": "henry8",
+    "hash": "936216eed496ef7d077fd68a3fe00c1b7c6dd44f5c556f3e21cf7bc7df36b09a"
+  },
+  {
+    "old_name": "juliuscaesar.jsonl",
+    "new_name": "sha256_5b89ad5310a700ea151c761ebf0489585858c54fc717120899f123afeaa5a13b.jsonl",
+    "work_id": "juliuscaesar",
+    "hash": "5b89ad5310a700ea151c761ebf0489585858c54fc717120899f123afeaa5a13b"
+  },
+  {
+    "old_name": "kingjohn.jsonl",
+    "new_name": "sha256_5eeaa1fedf0c3630b5038ce255c37ef7fc1a9c60cec007bc7c094bfcc04078cd.jsonl",
+    "work_id": "kingjohn",
+    "hash": "5eeaa1fedf0c3630b5038ce255c37ef7fc1a9c60cec007bc7c094bfcc04078cd"
+  },
+  {
+    "old_name": "kinglear.jsonl",
+    "new_name": "sha256_0cd4aaca86a64344457cc2b0d1b5549e00143c2c6ed33082acc1b3867cf56ded.jsonl",
+    "work_id": "kinglear",
+    "hash": "0cd4aaca86a64344457cc2b0d1b5549e00143c2c6ed33082acc1b3867cf56ded"
+  },
+  {
+    "old_name": "loverscomplaint.jsonl",
+    "new_name": "sha256_f142246e994ae1e7a7f3dae4ab9ce46e5ea7b31020471f682953e6a44fea5416.jsonl",
+    "work_id": "loverscomplaint",
+    "hash": "f142246e994ae1e7a7f3dae4ab9ce46e5ea7b31020471f682953e6a44fea5416"
+  },
+  {
+    "old_name": "loveslabours.jsonl",
+    "new_name": "sha256_48772ca984746acc1e7782b893492ef3a4c2ebf28a9a948938ce66fb523f86c1.jsonl",
+    "work_id": "loveslabours",
+    "hash": "48772ca984746acc1e7782b893492ef3a4c2ebf28a9a948938ce66fb523f86c1"
+  },
+  {
+    "old_name": "macbeth.jsonl",
+    "new_name": "sha256_2baa32e509482715781eadc6127ec10f4b780a46c98c4686babb046cd2b5b277.jsonl",
+    "work_id": "macbeth",
+    "hash": "2baa32e509482715781eadc6127ec10f4b780a46c98c4686babb046cd2b5b277"
+  },
+  {
+    "old_name": "measure.jsonl",
+    "new_name": "sha256_15016616827978628467453a373ae7ca8e5dee91c4cbe02816a3667a93e8abe2.jsonl",
+    "work_id": "measure",
+    "hash": "15016616827978628467453a373ae7ca8e5dee91c4cbe02816a3667a93e8abe2"
+  },
+  {
+    "old_name": "merchantvenice.jsonl",
+    "new_name": "sha256_9cddb2e702037bf594e4790c48e055f47683ec4418a8fede413c62f8de7a17b5.jsonl",
+    "work_id": "merchantvenice",
+    "hash": "9cddb2e702037bf594e4790c48e055f47683ec4418a8fede413c62f8de7a17b5"
+  },
+  {
+    "old_name": "merrywives.jsonl",
+    "new_name": "sha256_3ba29a47d540b08e450dbd9b9cbe9dbbe384f685a5689fc5c9cc3c0c2cd9ea50.jsonl",
+    "work_id": "merrywives",
+    "hash": "3ba29a47d540b08e450dbd9b9cbe9dbbe384f685a5689fc5c9cc3c0c2cd9ea50"
+  },
+  {
+    "old_name": "midsummer.jsonl",
+    "new_name": "sha256_853e902e9dd1b330df8c3e6f4ccd6c3896e4723ef7851ba12cf5af32dcfdb95c.jsonl",
+    "work_id": "midsummer",
+    "hash": "853e902e9dd1b330df8c3e6f4ccd6c3896e4723ef7851ba12cf5af32dcfdb95c"
+  },
+  {
+    "old_name": "muchado.jsonl",
+    "new_name": "sha256_b374d6849a0b6a001a7e1a898393350da1dae828626943307905326ec4aefe59.jsonl",
+    "work_id": "muchado",
+    "hash": "b374d6849a0b6a001a7e1a898393350da1dae828626943307905326ec4aefe59"
+  },
+  {
+    "old_name": "othello.jsonl",
+    "new_name": "sha256_79648183530ff7c5bd27b9d110fb17980272a0cfb0c37e31350ed61bcf0d96b7.jsonl",
+    "work_id": "othello",
+    "hash": "79648183530ff7c5bd27b9d110fb17980272a0cfb0c37e31350ed61bcf0d96b7"
+  },
+  {
+    "old_name": "passionatepilgrim.jsonl",
+    "new_name": "sha256_33b37b2fd40b1ef94f97ddc0a0458323b5df0e01d6405672f93937ae1590e87b.jsonl",
+    "work_id": "passionatepilgrim",
+    "hash": "33b37b2fd40b1ef94f97ddc0a0458323b5df0e01d6405672f93937ae1590e87b"
+  },
+  {
+    "old_name": "pericles.jsonl",
+    "new_name": "sha256_d5fdd592f9864ea171c63fdc946e7b9bae5c45cf870d2f92187ee1de8abb0b2f.jsonl",
+    "work_id": "pericles",
+    "hash": "d5fdd592f9864ea171c63fdc946e7b9bae5c45cf870d2f92187ee1de8abb0b2f"
+  },
+  {
+    "old_name": "phoenixturtle.jsonl",
+    "new_name": "sha256_e637143022ba69a6654548c27b2df40c2fad6f473a01ba76416bb535cd05fc73.jsonl",
+    "work_id": "phoenixturtle",
+    "hash": "e637143022ba69a6654548c27b2df40c2fad6f473a01ba76416bb535cd05fc73"
+  },
+  {
+    "old_name": "rapelucrece.jsonl",
+    "new_name": "sha256_e6a2f6716db2f22947f3d589d57769331cd1e8e0ef34551a06a5476f5dbf4730.jsonl",
+    "work_id": "rapelucrece",
+    "hash": "e6a2f6716db2f22947f3d589d57769331cd1e8e0ef34551a06a5476f5dbf4730"
+  },
+  {
+    "old_name": "richard2.jsonl",
+    "new_name": "sha256_c3316622da1c5ae6043d3994d7f14308624a07a7f6d854cb9617885c807cc9b6.jsonl",
+    "work_id": "richard2",
+    "hash": "c3316622da1c5ae6043d3994d7f14308624a07a7f6d854cb9617885c807cc9b6"
+  },
+  {
+    "old_name": "richard3.jsonl",
+    "new_name": "sha256_e37d274af5e0d9e1bb0c266727adc6a50d2251ae4c19e5304e8f194967614119.jsonl",
+    "work_id": "richard3",
+    "hash": "e37d274af5e0d9e1bb0c266727adc6a50d2251ae4c19e5304e8f194967614119"
+  },
+  {
+    "old_name": "romeojuliet.jsonl",
+    "new_name": "sha256_51add455691af224cf2c270ded361a623ecb31a82e8320bdc886bdae86251e5f.jsonl",
+    "work_id": "romeojuliet",
+    "hash": "51add455691af224cf2c270ded361a623ecb31a82e8320bdc886bdae86251e5f"
+  },
+  {
+    "old_name": "sonnets.jsonl",
+    "new_name": "sha256_23e8e8309de95d89e2a8d3e0d111349b8b3ec653951e5b76993b5715661b175e.jsonl",
+    "work_id": "sonnets",
+    "hash": "23e8e8309de95d89e2a8d3e0d111349b8b3ec653951e5b76993b5715661b175e"
+  },
+  {
+    "old_name": "tamingshrew.jsonl",
+    "new_name": "sha256_8f5b7c1511012c9a8a1906baafcf7086599e266bb5a19f62fa038c9592671fd0.jsonl",
+    "work_id": "tamingshrew",
+    "hash": "8f5b7c1511012c9a8a1906baafcf7086599e266bb5a19f62fa038c9592671fd0"
+  },
+  {
+    "old_name": "tempest.jsonl",
+    "new_name": "sha256_8b04871d9242d20c23aee1c8b8018bf73414a1a3e1072adb9c34aece613c9fc7.jsonl",
+    "work_id": "tempest",
+    "hash": "8b04871d9242d20c23aee1c8b8018bf73414a1a3e1072adb9c34aece613c9fc7"
+  },
+  {
+    "old_name": "timonathens.jsonl",
+    "new_name": "sha256_de81660ef3c9800cbc86df90ec4753b8318685fcd913dae3b94131b306e69e31.jsonl",
+    "work_id": "timonathens",
+    "hash": "de81660ef3c9800cbc86df90ec4753b8318685fcd913dae3b94131b306e69e31"
+  },
+  {
+    "old_name": "titus.jsonl",
+    "new_name": "sha256_a19d126e91d01af43e55773fcbc00a8476d4810a164259f0113298d9da988c5b.jsonl",
+    "work_id": "titus",
+    "hash": "a19d126e91d01af43e55773fcbc00a8476d4810a164259f0113298d9da988c5b"
+  },
+  {
+    "old_name": "troilus.jsonl",
+    "new_name": "sha256_be620ce0b23fce0054680a932984186ce4a57e1bedf183344509913b629d3cdb.jsonl",
+    "work_id": "troilus",
+    "hash": "be620ce0b23fce0054680a932984186ce4a57e1bedf183344509913b629d3cdb"
+  },
+  {
+    "old_name": "twogents.jsonl",
+    "new_name": "sha256_b9ea1bac57401e4fa4093e8c610ab59d9a86492b64417ef184db88de271aa4c6.jsonl",
+    "work_id": "twogents",
+    "hash": "b9ea1bac57401e4fa4093e8c610ab59d9a86492b64417ef184db88de271aa4c6"
+  },
+  {
+    "old_name": "venusadonis.jsonl",
+    "new_name": "sha256_7e03cbe440cd61d8774a0f6c068ecdd109dd80abac6e4d065028e077636832d5.jsonl",
+    "work_id": "venusadonis",
+    "hash": "7e03cbe440cd61d8774a0f6c068ecdd109dd80abac6e4d065028e077636832d5"
+  },
+  {
+    "old_name": "winterstale.jsonl",
+    "new_name": "sha256_3985ac2e8d55c7983494fb72fcd79294eea0b2f16090241064ecffcfdecd0028.jsonl",
+    "work_id": "winterstale",
+    "hash": "3985ac2e8d55c7983494fb72fcd79294eea0b2f16090241064ecffcfdecd0028"
+  }
+]
