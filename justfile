@@ -1,3 +1,5 @@
+set fallback
+
 # Start the API worker
 api:
     pnpm --filter api dev
