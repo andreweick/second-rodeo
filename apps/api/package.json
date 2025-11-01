@@ -18,6 +18,7 @@
 		"wrangler": "^4.45.0"
 	},
 	"dependencies": {
+		"@noble/hashes": "^2.0.1",
 		"drizzle-orm": "^0.44.7",
 		"exifr": "^7.1.3"
 	}
