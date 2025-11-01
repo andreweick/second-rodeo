@@ -10,6 +10,10 @@ Agents **must strictly adhere** to these project-wide rules:
 
 * **Language:** All new functional code must be written in **TypeScript**. Type definitions must be explicit where possible.
 * **Package Manager:** Must use **pnpm** for all dependency management (`pnpm install`, `pnpm add`, etc.). **Do not** use `npm` or `yarn`.
+* Prefer writing code over installing a package.  When a package is needed, **always** stop and tell the user what the package is, and how much code it is saving
+* Always use the pnpm --filter command from the root of the project repo (and NOT 'cd' into the directory to run the pnpm commands)
+* Always give me the pnpm --fiter command and not the "cd" commands
+* When giving me a 'wrangler' command to run **ALWAYS** give me the command as "pnpm --filter api exec wrangler..."
 * **Monorepo Structure:** All packages reside in the `/packages` directory. Agent operations must respect package boundaries and use **pnpm workspaces** for internal dependency linking.
 * **Testing Framework:** Use **Vitest** for unit and integration tests.
 * **Linting & Formatting:** Adhere to the existing **ESLint** and **Prettier** configurations. Agents must run `pnpm lint --fix` before committing changes.

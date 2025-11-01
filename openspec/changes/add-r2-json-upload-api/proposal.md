@@ -9,12 +9,14 @@ This provides a generic, type-agnostic upload mechanism that computes content ha
 ## What Changes
 
 - Add HTTP endpoint `POST /upload` accepting JSON with `type` and `data` fields
-- Compute SHA-256 hash of the `data` object (hex-encoded, URL-safe)
+- Compute SHA-256 hash of the `data` object (lowercase hex-encoded)
+- Serialize `data` using canonical JSON (stable key ordering) for consistent hashing
 - Inject `id` field with format `sha256:{hash}`
-- Store wrapped JSON to R2 at `{type}/sha256_{hash}.json`
-- Set R2 object metadata `x-amz-meta-sha256` with hash value
+- Store wrapped JSON to R2 at `sha256_{hash}.json`
+- Set R2 object metadata `x-amz-meta-sha256-hex` with hash value
 - Return object key and computed hash to client
 - No type validation - accept any type string (future-proof)
+- Use R2 bucket configured via `R2_BUCKET_NAME` environment variable (defaults to `sr-json`)
 
 ## Impact
 
@@ -24,6 +26,10 @@ This provides a generic, type-agnostic upload mechanism that computes content ha
 **Affected code:**
 - `apps/api/src/handlers/http.ts` - Add `/upload` endpoint
 - New module: `apps/api/src/services/json-upload.ts` - Hash computation and R2 storage logic
+
+**Configuration:**
+- Environment variable: `R2_BUCKET_NAME` (default: `sr-json`)
+- Target bucket for JSON object storage
 
 **Storage format:**
 - Wrapped JSON envelope:
@@ -38,14 +44,14 @@ This provides a generic, type-agnostic upload mechanism that computes content ha
     }
   }
   ```
-- R2 path: `{type}/sha256_{hash}.json`
-- Metadata: `x-amz-meta-sha256: {hash}`
+- R2 path: `{bucket}/sha256_{hash}.json` (where bucket = `R2_BUCKET_NAME`)
+- Metadata: `x-amz-meta-sha256-hex: {hash}`
 
 **User workflow:**
 1. Client prepares content JSON (no wrapping needed)
 2. POST to `/upload` with `{"type": "chatter", "data": {...}}`
 3. Server computes hash, wraps, stores to R2
-4. Server returns `{objectKey: "chatter/sha256_abc.json", id: "sha256:abc..."}`
+4. Server returns `{objectKey: "sha256_abc.json", id: "sha256:abc..."}`
 5. Client saves object key for later reference
 
 **Non-breaking changes:**
