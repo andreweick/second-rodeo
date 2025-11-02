@@ -27,77 +27,61 @@
 
 ## 3. Bulk Ingestion Endpoints
 
-- [ ] 3.1 Add POST /chatter/ingest endpoint in `apps/api/src/handlers/http.ts`
-- [ ] 3.2 Add POST /checkins/ingest endpoint
-- [ ] 3.3 Add POST /films/ingest endpoint
-- [ ] 3.4 Add POST /quotes/ingest endpoint
-- [ ] 3.5 Add POST /shakespeare/ingest endpoint
-- [ ] 3.6 Add POST /topten/ingest endpoint
-- [ ] 3.7 Implement authentication check using AUTH_TOKEN for all endpoints
-- [ ] 3.8 Implement R2 list operations for each content type prefix
-- [ ] 3.9 Queue one message per file with objectKey
-- [ ] 3.10 Return JSON response with count of queued messages
-- [ ] 3.11 Handle R2 listing errors with 500 status
+- [ ] 3.1 Add POST /ingest/all endpoint in `apps/api/src/handlers/http.ts`
+- [ ] 3.2 Add POST /ingest/{objectKey} endpoint for single-file ingestion
+- [ ] 3.3 Implement authentication check using AUTH_TOKEN for both endpoints
+- [ ] 3.4 Implement R2 list operations with pagination (cursor, limit: 1000)
+- [ ] 3.5 Implement sendBatch() to queue 1000 messages per page
+- [ ] 3.6 Loop through all pages until cursor is undefined
+- [ ] 3.7 Return JSON response with total count of queued messages
+- [ ] 3.8 Handle R2 listing errors with 500 status
+- [ ] 3.9 Add logging for pagination progress (pages processed, total queued)
 
-## 4. Testing - Chatter
+## 4. Testing - Bulk Ingestion Endpoints
 
-- [ ] 4.1 Write integration test for /chatter/ingest endpoint authentication
-- [ ] 4.2 Write integration test for successful bulk ingestion trigger
-- [ ] 4.3 Write integration test for R2 listing and queue message creation
-- [ ] 4.4 Write integration test for error handling (R2 failures)
-- [ ] 4.5 Write integration test for chatter queue processing with wrapped JSON
-- [ ] 4.6 Verify validator unwraps data and excludes title, date from D1 insert
+- [ ] 4.1 Write integration test for /ingest/all endpoint authentication
+- [ ] 4.2 Write integration test for /ingest/{objectKey} endpoint authentication
+- [ ] 4.3 Write integration test for successful bulk ingestion with pagination
+- [ ] 4.4 Write integration test for R2 pagination (cursor handling, sendBatch)
+- [ ] 4.5 Write integration test for error handling (R2 failures)
+- [ ] 4.6 Verify sendBatch queues correct number of messages per page
+- [ ] 4.7 Test single-file ingestion endpoint
 
-## 5. Testing - Checkins
+## 5. Testing - Queue Consumer (All Types)
 
-- [ ] 5.1 Write integration test for /checkins/ingest endpoint authentication
-- [ ] 5.2 Write integration test for successful bulk ingestion trigger
+- [ ] 5.1 Write integration test for chatter queue processing with wrapped JSON
+- [ ] 5.2 Verify chatter validator unwraps data and excludes title, date from D1 insert
 - [ ] 5.3 Write integration test for checkins queue processing with wrapped JSON
-- [ ] 5.4 Verify validator excludes 11 removed fields from D1 insert
+- [ ] 5.4 Verify checkins validator excludes 11 removed fields from D1 insert
+- [ ] 5.5 Write integration test for films queue processing with wrapped JSON
+- [ ] 5.6 Verify films validator excludes 4 removed fields from D1 insert
+- [ ] 5.7 Write integration test for quotes queue processing with wrapped JSON
+- [ ] 5.8 Verify quotes validator excludes text, date from D1 insert
+- [ ] 5.9 Write integration test for shakespeare queue processing with wrapped JSON
+- [ ] 5.10 Verify shakespeare validator excludes text fields from D1 insert
+- [ ] 5.11 Write integration test for topten queue processing with wrapped JSON
+- [ ] 5.12 Verify topten validator stores only minimal metadata in D1
+- [ ] 5.13 Test consumer routing (type field determines which validator to use)
 
-## 6. Testing - Films
+## 6. Integration Testing
 
-- [ ] 6.1 Write integration test for /films/ingest endpoint authentication
-- [ ] 6.2 Write integration test for successful bulk ingestion trigger
-- [ ] 6.3 Write integration test for films queue processing with wrapped JSON
-- [ ] 6.4 Verify validator excludes 4 removed fields from D1 insert
-- [ ] 6.5 Test URL derivation (Letterboxd, TMDB poster)
+- [ ] 6.1 Run full test suite: `just test`
+- [ ] 6.2 Verify all 6 content types process correctly with wrapped JSON
+- [ ] 6.3 Test idempotent re-ingestion (duplicate slug handling)
+- [ ] 6.4 Test error handling for missing required fields
+- [ ] 6.5 Test error handling for malformed wrapped JSON
+- [ ] 6.6 Test bulk ingestion with mixed content types in R2
 
-## 7. Testing - Quotes
+## 7. Deployment Preparation
 
-- [ ] 7.1 Write integration test for /quotes/ingest endpoint authentication
-- [ ] 7.2 Write integration test for quotes queue processing with wrapped JSON
-- [ ] 7.3 Verify validator excludes text, date from D1 insert
-
-## 8. Testing - Shakespeare
-
-- [ ] 8.1 Write integration test for /shakespeare/ingest endpoint authentication
-- [ ] 8.2 Write integration test for shakespeare queue processing with wrapped JSON
-- [ ] 8.3 Verify validator excludes text fields from D1 insert
-- [ ] 8.4 Test shakespeare_works table ingestion (if applicable)
-
-## 9. Testing - Topten
-
-- [ ] 9.1 Write integration test for /topten/ingest endpoint authentication
-- [ ] 9.2 Write integration test for topten queue processing with wrapped JSON
-- [ ] 9.3 Verify validator stores only minimal metadata in D1
-- [ ] 9.4 Test year/month derivation from date field using SQLite functions
-
-## 10. Integration Testing
-
-- [ ] 10.1 Run full test suite: `just test`
-- [ ] 10.2 Verify all 6 content types process correctly with wrapped JSON
-- [ ] 10.3 Test idempotent re-ingestion (duplicate slug handling)
-- [ ] 10.4 Test error handling for missing required fields
-- [ ] 10.5 Test error handling for malformed wrapped JSON
-
-## 11. Deployment Preparation
-
-- [ ] 11.1 Ensure all R2 files are migrated to wrapped format (manual migration)
-- [ ] 11.2 Test locally with wrangler dev for all 6 content types
-- [ ] 11.3 Deploy worker to production
-- [ ] 11.4 Apply migrations to production D1: `wrangler d1 migrations apply app_db`
-- [ ] 11.5 Call POST /{type}/ingest endpoints for all 6 types
-- [ ] 11.6 Monitor queue processing and D1 record counts
-- [ ] 11.7 Verify final counts match expected records per type
-- [ ] 11.8 Spot-check: Query D1 and verify schema, fetch full JSON from R2
+- [ ] 7.1 Ensure all R2 files are migrated to wrapped format (manual migration)
+- [ ] 7.2 Configure queue bindings in wrangler.jsonc (producer and consumer)
+- [ ] 7.3 Create queue in Cloudflare: `wrangler queues create sr-ingest-queue`
+- [ ] 7.4 Add INGEST_QUEUE binding to Env type interface
+- [ ] 7.5 Test locally with wrangler dev (all 6 content types)
+- [ ] 7.6 Deploy worker to production
+- [ ] 7.7 Apply migrations to production D1: `wrangler d1 migrations apply app_db`
+- [ ] 7.8 Call POST /ingest/all to queue all 50K+ files
+- [ ] 7.9 Monitor queue processing and D1 record counts (~15-30 minutes)
+- [ ] 7.10 Verify final counts match expected records per type
+- [ ] 7.11 Spot-check: Query D1 and verify schema, fetch full JSON from R2

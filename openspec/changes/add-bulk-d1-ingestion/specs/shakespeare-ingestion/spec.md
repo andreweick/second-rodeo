@@ -20,32 +20,26 @@ The system SHALL maintain Shakespeare corpus data using a hot/cold storage archi
 
 ### Requirement: Shakespeare Ingestion Endpoints
 
-The system SHALL provide authenticated HTTP endpoints to trigger bulk or single-file ingestion of Shakespeare data from R2.
+The system SHALL provide authenticated HTTP endpoints to trigger bulk or single-file ingestion of all content types from R2.
 
 #### Scenario: Successful bulk ingestion
 
-- **WHEN** an authenticated POST request is made to /ingest/shakespeare/all
-- **THEN** the system SHALL list all objects in SR_JSON bucket
-- **AND** the system SHALL read each object's envelope to filter by type "shakespeare"
-- **AND** the system SHALL send one queue message per paragraph file
-- **AND** the response SHALL return JSON with count of messages queued
+- **WHEN** an authenticated POST request is made to /ingest/all
+- **THEN** the system SHALL list all objects in SR_JSON bucket using pagination
+- **AND** the system SHALL use sendBatch() to queue up to 1000 messages per page
+- **AND** the system SHALL iterate through all pages until cursor is undefined
+- **AND** the response SHALL return JSON with total count of messages queued
 
 #### Scenario: Successful single-file ingestion
 
-- **WHEN** an authenticated POST request is made to /ingest/shakespeare/{objectKey}
+- **WHEN** an authenticated POST request is made to /ingest/{objectKey}
 - **THEN** the system SHALL send a queue message for the specified objectKey
 - **AND** the response SHALL return JSON with queued: 1 and the objectKey
 
 #### Scenario: Authentication required
 
-- **WHEN** POST /ingest/shakespeare/* is called without valid AUTH_TOKEN
+- **WHEN** POST /ingest/* is called without valid AUTH_TOKEN
 - **THEN** the system SHALL return 401 Unauthorized status
-
-#### Scenario: Invalid type parameter
-
-- **WHEN** POST /ingest/{invalidType}/all is called
-- **THEN** the system SHALL return 400 Bad Request with error message
-- **AND** no queue messages SHALL be sent
 
 #### Scenario: R2 listing failure
 
@@ -53,16 +47,22 @@ The system SHALL provide authenticated HTTP endpoints to trigger bulk or single-
 - **THEN** the system SHALL return 500 status with error message
 - **AND** no queue messages SHALL be sent
 
+#### Scenario: Pagination handling
+
+- **WHEN** R2 bucket contains more than 1000 objects
+- **THEN** the system SHALL use cursor-based pagination
+- **AND** the system SHALL process all pages within Worker timeout limits (< 30 seconds)
+
 ### Requirement: Paragraph Queue Processing
 
-The system SHALL process Shakespeare paragraph queue messages by validating wrapped JSON structure and inserting minimal metadata to D1.
+The system SHALL process queue messages by validating wrapped JSON structure, routing by type field, and inserting minimal metadata to D1.
 
 #### Scenario: Valid paragraph ingestion from wrapped JSON
 
-- **WHEN** a queue message with objectKey `shakespeare/paragraphs/sha256_{hash}.json` is received
+- **WHEN** a queue message with objectKey `sha256_{hash}.json` is received
 - **THEN** the system SHALL fetch wrapped JSON from R2
 - **AND** unwrap to extract type, id, and data fields
-- **AND** validate type equals "shakespeare" or "shakespert" (handle typo)
+- **AND** route to shakespeare validator when type equals "shakespeare" or "shakespert" (handle typo)
 - **AND** validate required fields in data: work_id, act, scene, paragraph_num, character_id, is_stage_direction, word_count, timestamp
 - **AND** insert record to shakespeare table with: id (from envelope), workId, act, scene, paragraphNum, characterId, isStageDirection, wordCount, timestamp, r2Key
 - **AND** mark message as successfully processed
@@ -87,8 +87,8 @@ The system SHALL support idempotent re-ingestion of Shakespeare data without cau
 
 #### Scenario: Re-running full ingestion
 
-- **WHEN** /shakespeare/ingest is called multiple times
-- **THEN** each call SHALL queue all 35,629 messages again
+- **WHEN** /ingest/all is called multiple times
+- **THEN** each call SHALL queue all messages again (including all content types)
 - **AND** queue processing SHALL handle duplicate ids gracefully via UNIQUE constraint
 - **AND** final D1 state SHALL contain exactly 35,629 paragraph records
 
