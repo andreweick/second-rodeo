@@ -18,21 +18,34 @@ The system SHALL maintain Shakespeare corpus data using a hot/cold storage archi
 - **THEN** R2 SHALL store complete wrapped JSON with type, id, and data containing all fields including text, text_phonetic, text_stem, and work metadata
 - **AND** the R2 object key SHALL match the file path pattern `shakespeare/paragraphs/sha256_{hash}.json`
 
-### Requirement: Bulk Paragraph Ingestion Endpoint
+### Requirement: Shakespeare Ingestion Endpoints
 
-The system SHALL provide an authenticated HTTP endpoint to trigger bulk ingestion of all Shakespeare paragraph files from R2.
+The system SHALL provide authenticated HTTP endpoints to trigger bulk or single-file ingestion of Shakespeare data from R2.
 
-#### Scenario: Successful bulk ingestion trigger
+#### Scenario: Successful bulk ingestion
 
-- **WHEN** an authenticated POST request is made to /shakespeare/ingest
-- **THEN** the system SHALL list all objects with R2 prefix `shakespeare/paragraphs/`
+- **WHEN** an authenticated POST request is made to /ingest/shakespeare/all
+- **THEN** the system SHALL list all objects in SR_JSON bucket
+- **AND** the system SHALL read each object's envelope to filter by type "shakespeare"
 - **AND** the system SHALL send one queue message per paragraph file
 - **AND** the response SHALL return JSON with count of messages queued
 
+#### Scenario: Successful single-file ingestion
+
+- **WHEN** an authenticated POST request is made to /ingest/shakespeare/{objectKey}
+- **THEN** the system SHALL send a queue message for the specified objectKey
+- **AND** the response SHALL return JSON with queued: 1 and the objectKey
+
 #### Scenario: Authentication required
 
-- **WHEN** POST /shakespeare/ingest is called without valid AUTH_TOKEN
+- **WHEN** POST /ingest/shakespeare/* is called without valid AUTH_TOKEN
 - **THEN** the system SHALL return 401 Unauthorized status
+
+#### Scenario: Invalid type parameter
+
+- **WHEN** POST /ingest/{invalidType}/all is called
+- **THEN** the system SHALL return 400 Bad Request with error message
+- **AND** no queue messages SHALL be sent
 
 #### Scenario: R2 listing failure
 
@@ -92,8 +105,9 @@ The system SHALL use consistent R2 object key formats for Shakespeare data to en
 #### Scenario: Paragraph file naming
 
 - **WHEN** storing or retrieving paragraph JSON
-- **THEN** R2 key format SHALL be `shakespeare/paragraphs/sha256_{hash}.json` or `shakespert/paragraphs/sha256_{hash}.json`
+- **THEN** R2 key format SHALL be `sha256_{hash}.json` (content-addressable at bucket root)
 - **AND** {hash} SHALL match the id field in the envelope (without `sha256:` prefix)
+- **AND** content type SHALL be determined by envelope `type` field, not object key path
 
 ### Requirement: Query Performance Optimization
 

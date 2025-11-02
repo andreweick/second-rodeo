@@ -137,29 +137,90 @@ function validateAndMapChatter(envelope: unknown, objectKey: string): NewChatter
 - Keep titles in D1: Simpler but wastes ~1MB across all types
 - More aggressive removal: Would require R2 fetches for basic listing
 
-### Decision 4: Per-Type Ingestion Endpoints
+### Decision 4: Parameterized Ingestion Endpoints
 
-**Choice:** `POST /chatter/ingest`, `POST /checkins/ingest`, etc.
+**Choice:** `POST /ingest/{type}/all` for bulk, `POST /ingest/{type}/{objectKey}` for single-file
 
 **Implementation:**
 ```typescript
-// /chatter/ingest
-const objects = await bucket.list({ prefix: 'chatter/' });
-for (const obj of objects.objects) {
-  await queue.send({ objectKey: obj.key });
+// Route handler
+if (url.pathname.startsWith('/ingest/')) {
+  const parts = url.pathname.split('/').filter(Boolean);
+  // parts = ['ingest', 'chatter', 'all'] or ['ingest', 'chatter', 'sha256_abc.json']
+
+  const type = parts[1];      // 'chatter', 'films', etc.
+  const target = parts[2];    // 'all' or 'sha256_abc.json'
+
+  // Validate type
+  const validTypes = ['chatter', 'checkins', 'films', 'quotes', 'shakespeare', 'topten'];
+  if (!validTypes.includes(type)) {
+    return new Response(JSON.stringify({ error: 'Invalid type' }), { status: 400 });
+  }
+
+  if (target === 'all') {
+    // Bulk ingestion: list all R2, filter by type, queue all
+    return handleBulkIngest(type, env);
+  } else {
+    // Single file: queue this specific objectKey
+    return handleSingleIngest(type, target, env);
+  }
 }
-return { queued: objects.objects.length };
+
+// Bulk ingestion implementation
+async function handleBulkIngest(type: string, env: Env) {
+  const objects = await env.SR_JSON.list();  // List all objects
+  let queued = 0;
+
+  for (const obj of objects.objects) {
+    // Fetch and parse envelope to check type
+    const file = await env.SR_JSON.get(obj.key);
+    if (!file) continue;
+
+    const text = await file.text();
+    const envelope = JSON.parse(text);
+
+    // Only queue if type matches
+    if (envelope.type === type) {
+      await env.INGEST_QUEUE.send({ objectKey: obj.key });
+      queued++;
+    }
+  }
+  return new Response(JSON.stringify({ queued }), { status: 200 });
+}
+
+// Single file ingestion implementation
+async function handleSingleIngest(type: string, objectKey: string, env: Env) {
+  // Optionally validate file exists and type matches
+  await env.INGEST_QUEUE.send({ objectKey });
+  return new Response(JSON.stringify({ queued: 1, objectKey }), { status: 200 });
+}
 ```
 
 **Rationale:**
-- RESTful pattern (type in URL)
-- Clear authentication per type
-- Simple R2 prefix filtering
-- Idempotent (can re-run safely)
+- RESTful pattern (type in URL path)
+- Single implementation for all types (DRY)
+- Future-proof: new types = add to validation array
+- Supports both bulk and single-file ingestion
+- Content-addressable storage at root level
+- Type filtering via envelope inspection
+- Upload endpoint stays focused on storage only
+
+**Use cases:**
+- Bulk: `POST /ingest/chatter/all` → processes all 8,006 chatter files
+- Single: `POST /ingest/chatter/sha256_abc.json` → processes one file
+- Re-ingestion: Can re-run `/all` safely (idempotent via UNIQUE constraints)
+
+**Trade-offs:**
+- Bulk ingestion must fetch each file to determine type (less efficient than prefix filtering)
+- Acceptable for one-time bulk ingestion operations
+- Alternative of subdirectories would require file migration
+- Upload does not auto-queue (manual trigger required)
 
 **Alternatives considered:**
-- Generic /ingest?type=chatter: Less RESTful, type validation needed
-- Batch with progress tracking: Complex, unnecessary for one-time ops
+- Named endpoints (/chatter/ingest): Less flexible, need new endpoint per type
+- Query parameter (?type=chatter): Less RESTful
+- Auto-queue on upload: Couples upload to queue availability
+- Subdirectory organization: Would require re-uploading all files
 
 ### Decision 5: Preserve Phase1-* Field Mappings
 

@@ -8,13 +8,14 @@ This consolidates six separate phase1-*-ingest proposals into a unified implemen
 
 ## What Changes
 
-- Add HTTP endpoints `POST /{type}/ingest` for six content types
+- Add parameterized HTTP ingestion API: `POST /ingest/{type}/all` for bulk ingestion and `POST /ingest/{type}/{objectKey}` for single-file ingestion
 - Update validators to handle wrapped JSON format (`{type, id, data}`)
 - Extract required fields from `data` object per content type
 - **BREAKING**: Update D1 table schemas to remove redundant fields (per type-specific requirements)
 - Generate Drizzle migrations for schema changes
 - Support idempotent re-ingestion via UNIQUE constraints on slug/id fields
 - Preserve exact field mappings from existing phase1-*-ingest validators
+- Keep `/upload` endpoint focused on R2 storage only (no auto-queuing)
 
 ## Impact
 
@@ -46,10 +47,16 @@ This consolidates six separate phase1-*-ingest proposals into a unified implemen
 **User workflow:**
 1. Files uploaded to R2 via `/upload` endpoint (wrapped format)
 2. Apply schema migrations: `just migrate-local` then production
-3. Call `POST /{type}/ingest` endpoints (authenticated)
-4. Endpoints list R2 objects and queue messages
-5. Queue processes files, validates, inserts to D1
-6. Query D1 for filtering, fetch R2 for full content
+3. Trigger ingestion:
+   - **Bulk:** `POST /ingest/{type}/all` lists all R2 objects, filters by type, queues all matches
+   - **Single:** `POST /ingest/{type}/{objectKey}` queues specific file for processing
+4. Queue processes files, validates, inserts to D1
+5. Query D1 for filtering, fetch R2 for full content
+
+**Ingestion patterns:**
+- Initial bulk ingestion: `POST /ingest/chatter/all` (processes all chatter files)
+- Re-process single file: `POST /ingest/chatter/sha256_abc123.json`
+- Upload stays storage-only: `/upload` does not auto-queue
 
 **Breaking changes:**
 - **BREAKING**: All 6 table schemas simplified (fields removed from D1)

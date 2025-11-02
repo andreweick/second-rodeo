@@ -42,22 +42,34 @@ The system SHALL maintain top ten list data using a hot/cold storage architectur
 - **THEN** the system SHALL use SQLite date function: `WHERE strftime('%Y-%m', date) = '1990-05'`
 - **AND** NOT require a separate month column
 
-### Requirement: Bulk Ingestion Endpoint
+### Requirement: Top Ten List Ingestion Endpoints
 
-The system SHALL provide an authenticated HTTP endpoint to trigger bulk ingestion of all top ten list files from R2.
+The system SHALL provide authenticated HTTP endpoints to trigger bulk or single-file ingestion of top ten list data from R2.
 
-#### Scenario: Authenticated bulk ingestion
+#### Scenario: Successful bulk ingestion
 
-- **WHEN** an authenticated POST request is made to /topten/ingest
-- **THEN** the system SHALL list all objects with R2 prefix `topten/`
-- **AND** filter for .json files only
-- **AND** send one queue message per file
-- **AND** return JSON with count of messages queued
+- **WHEN** an authenticated POST request is made to /ingest/topten/all
+- **THEN** the system SHALL list all objects in SR_JSON bucket
+- **AND** the system SHALL read each object's envelope to filter by type "topten"
+- **AND** the system SHALL send one queue message per list file
+- **AND** the response SHALL return JSON with count of messages queued
+
+#### Scenario: Successful single-file ingestion
+
+- **WHEN** an authenticated POST request is made to /ingest/topten/{objectKey}
+- **THEN** the system SHALL send a queue message for the specified objectKey
+- **AND** the response SHALL return JSON with queued: 1 and the objectKey
 
 #### Scenario: Authentication required
 
-- **WHEN** POST /topten/ingest is called without valid AUTH_TOKEN
+- **WHEN** POST /ingest/topten/* is called without valid AUTH_TOKEN
 - **THEN** the system SHALL return 401 Unauthorized status
+
+#### Scenario: Invalid type parameter
+
+- **WHEN** POST /ingest/{invalidType}/all is called
+- **THEN** the system SHALL return 400 Bad Request with error message
+- **AND** no queue messages SHALL be sent
 
 #### Scenario: R2 listing error handling
 
@@ -71,7 +83,7 @@ The system SHALL process top ten list queue messages by validating wrapped JSON 
 
 #### Scenario: Successful ingestion from wrapped JSON
 
-- **WHEN** a queue message with objectKey `topten/sha256_{hash}.json` is received
+- **WHEN** a queue message with objectKey `sha256_{hash}.json` is received
 - **THEN** the system SHALL fetch wrapped JSON from R2
 - **AND** unwrap to extract type, id, and data fields
 - **AND** validate type equals "topten"
@@ -124,8 +136,9 @@ The system SHALL use consistent R2 object key formats for top ten list data to e
 #### Scenario: Flat file structure
 
 - **WHEN** storing or retrieving list JSON
-- **THEN** R2 key format SHALL be `topten/sha256_{hash}.json`
+- **THEN** R2 key format SHALL be `sha256_{hash}.json` (content-addressable at bucket root)
 - **AND** {hash} SHALL match the id field in the envelope (without `sha256:` prefix)
+- **AND** content type SHALL be determined by envelope `type` field, not object key path
 
 #### Scenario: Direct path computation
 

@@ -16,7 +16,7 @@ The system SHALL maintain film viewing data using a hot/cold storage architectur
 
 - **WHEN** a film viewing record is ingested
 - **THEN** R2 SHALL store complete wrapped JSON with type, id, and data containing all fields including title, date, posterUrl, letterboxdUri
-- **AND** the R2 object key SHALL match the file path pattern `films/sha256_{hash}.json`
+- **AND** the R2 object key SHALL match the file path pattern `sha256_{hash}.json`
 
 #### Scenario: Title retrieval from R2
 
@@ -24,21 +24,34 @@ The system SHALL maintain film viewing data using a hot/cold storage architectur
 - **THEN** the system SHALL fetch title from R2 JSON data object
 - **OR** the system MAY use slug as a fallback identifier
 
-### Requirement: Bulk Films Ingestion Endpoint
+### Requirement: Films Ingestion Endpoints
 
-The system SHALL provide an authenticated HTTP endpoint to trigger bulk ingestion of all film files from R2.
+The system SHALL provide authenticated HTTP endpoints to trigger bulk or single-file ingestion of films data from R2.
 
-#### Scenario: Successful bulk ingestion trigger
+#### Scenario: Successful bulk ingestion
 
-- **WHEN** an authenticated POST request is made to /films/ingest
-- **THEN** the system SHALL list all objects with R2 prefix `films/`
+- **WHEN** an authenticated POST request is made to /ingest/films/all
+- **THEN** the system SHALL list all objects in SR_JSON bucket
+- **AND** the system SHALL read each object's envelope to filter by type "films"
 - **AND** the system SHALL send one queue message per film file
 - **AND** the response SHALL return JSON with count of messages queued
 
+#### Scenario: Successful single-file ingestion
+
+- **WHEN** an authenticated POST request is made to /ingest/films/{objectKey}
+- **THEN** the system SHALL send a queue message for the specified objectKey
+- **AND** the response SHALL return JSON with queued: 1 and the objectKey
+
 #### Scenario: Authentication required
 
-- **WHEN** POST /films/ingest is called without valid AUTH_TOKEN
+- **WHEN** POST /ingest/films/* is called without valid AUTH_TOKEN
 - **THEN** the system SHALL return 401 Unauthorized status
+
+#### Scenario: Invalid type parameter
+
+- **WHEN** POST /ingest/{invalidType}/all is called
+- **THEN** the system SHALL return 400 Bad Request with error message
+- **AND** no queue messages SHALL be sent
 
 #### Scenario: R2 listing failure
 
@@ -52,7 +65,7 @@ The system SHALL process film queue messages by validating wrapped JSON structur
 
 #### Scenario: Valid film ingestion from wrapped JSON
 
-- **WHEN** a queue message with objectKey `films/sha256_{hash}.json` is received
+- **WHEN** a queue message with objectKey `sha256_{hash}.json` is received
 - **THEN** the system SHALL fetch wrapped JSON from R2
 - **AND** unwrap to extract type, id, and data fields
 - **AND** validate type equals "films"
@@ -98,8 +111,9 @@ The system SHALL use consistent R2 object key formats for films data to enable p
 #### Scenario: Film file naming
 
 - **WHEN** storing or retrieving film JSON
-- **THEN** R2 key format SHALL be `films/sha256_{hash}.json`
+- **THEN** R2 key format SHALL be `sha256_{hash}.json` (content-addressable at bucket root)
 - **AND** {hash} SHALL match the id field in the envelope (without `sha256:` prefix)
+- **AND** content type SHALL be determined by envelope `type` field, not object key path
 
 ### Requirement: Derived URL Generation
 
