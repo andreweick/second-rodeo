@@ -4,11 +4,16 @@ Cloudflare Worker application with HTTP endpoints and queue processing for JSON 
 
 ## Features
 
-- **HTTP Handler**: Health check endpoint and image upload API
-- **Image Upload API**: Upload images to Cloudflare Images with authentication and validation
-- **Queue Consumer**: Processes messages from Cloudflare Queue to read and validate JSON files from R2
-- **R2 Integration**: Reads JSON files from the `sr-json` bucket
-- **D1 Database**: Connected to `app_db` for data storage
+- **HTTP Endpoints**:
+  - Health check (`GET /health`)
+  - Image upload to Cloudflare Images (`POST /images`)
+  - JSON upload with content hashing (`POST /upload`)
+  - Bulk ingestion with self-paginating queue (`POST /ingest/all`)
+  - Single file ingestion (`POST /ingest/{objectKey}`)
+- **Queue Consumer**: Processes file ingestion and pagination messages from Cloudflare Queue
+- **R2 Integration**: Content-addressable storage for JSON files with type-based prefixes
+- **D1 Database**: Stores minimal metadata (hot/cold architecture with R2 for full content)
+- **Self-Paginating Architecture**: Single curl command ingests all 50K+ files via queue-based pagination
 
 ## Project Structure
 
@@ -27,7 +32,8 @@ src/
 test/
 ├── index.spec.ts        # HTTP handler tests
 ├── image-upload.spec.ts # Image upload API tests
-└── queue.spec.ts        # Queue handler tests (6 scenarios)
+├── json-upload.spec.ts  # JSON upload API tests
+└── queue.spec.ts        # Queue handler tests (9 scenarios)
 ```
 
 ## API Endpoints
@@ -116,6 +122,164 @@ curl -X POST https://your-worker.workers.dev/images \
 - `400 Bad Request`: Invalid file type or missing file
 - `500 Internal Server Error`: Cloudflare Images API error
 
+### POST /upload
+
+Upload JSON content to R2 with content-addressable storage and automatic queue-based D1 ingestion.
+
+**Authentication**: Requires `Authorization: Bearer <AUTH_TOKEN>` header
+
+**Request**:
+- Method: `POST`
+- Content-Type: `application/json`
+- Body: JSON object with `type` and `data` fields
+
+**Wrapped JSON Format**:
+```json
+{
+  "type": "chatter",
+  "data": {
+    "date_posted": "2025-01-15T12:00:00Z",
+    "year": 2025,
+    "month": 1,
+    "slug": "example-post",
+    "title": "Example Post",
+    "content": "Post content here..."
+  }
+}
+```
+
+**Supported Types**:
+- `chatter` - Blog-style posts
+- `checkins` - Location check-ins
+- `films` - Film reviews/data
+- `quotes` - Quote collections
+- `shakespeare` - Shakespeare text
+- `topten` - Top ten lists
+
+**Example using curl**:
+```bash
+curl -X POST https://your-worker.workers.dev/upload \
+  -H "Authorization: Bearer your-auth-token" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "type": "chatter",
+    "data": {
+      "date_posted": "2025-01-15T12:00:00Z",
+      "year": 2025,
+      "month": 1,
+      "slug": "my-post",
+      "title": "My Post"
+    }
+  }'
+```
+
+**Success Response** (201 Created):
+```json
+{
+  "objectKey": "chatter/sha256_abc123...def.json",
+  "id": "sha256:abc123...def"
+}
+```
+
+**How it Works**:
+1. Server computes SHA-256 hash of the `data` object
+2. Wraps content in envelope: `{type, id: "sha256:hash", data}`
+3. Stores to R2 at path: `{type}/sha256_{hash}.json`
+4. Sends message to queue for D1 ingestion
+5. Queue consumer processes file and inserts metadata to D1
+
+**Error Responses**:
+- `401 Unauthorized`: Missing or invalid authentication token
+- `400 Bad Request`: Missing or invalid `type` or `data` fields
+- `500 Internal Server Error`: R2 storage failure
+
+### POST /ingest/all
+
+Trigger bulk ingestion of all JSON files from R2 into D1 database using self-paginating queue mechanism.
+
+**Authentication**: Requires `Authorization: Bearer <AUTH_TOKEN>` header
+
+**Request**:
+- Method: `POST`
+- Query Parameters (optional):
+  - `cursor` - Pagination cursor (automatically handled by queue, not needed by clients)
+
+**How Self-Pagination Works**:
+1. Client calls `/ingest/all` **once** (no cursor needed)
+2. Endpoint lists up to 1000 files from R2 and queues them in batches of 100
+3. If more files exist, endpoint queues a special pagination message: `{type: "pagination", cursor: "..."}`
+4. Queue consumer detects pagination messages and calls `/ingest/all?cursor=...` internally
+5. Process repeats automatically until all files are queued
+6. **Result**: Single curl command ingests all 50K+ files without client pagination
+
+**Example using curl**:
+```bash
+# One command ingests ALL files via self-paginating queue
+curl -X POST https://your-worker.workers.dev/ingest/all \
+  -H "Authorization: Bearer your-auth-token"
+```
+
+**Success Response** (200 OK):
+```json
+{
+  "success": true,
+  "queued": 1000,
+  "hasMore": true,
+  "message": "Queued 1000 files. Pagination will continue automatically."
+}
+```
+
+**Final Page Response**:
+```json
+{
+  "success": true,
+  "queued": 132,
+  "hasMore": false,
+  "message": "Queued 132 files. Ingestion complete."
+}
+```
+
+**Architecture Details**:
+- **R2 List Limit**: 1000 objects per page
+- **Queue Batch Limit**: 100 messages per sendBatch()
+- **Pagination Messages**: `{type: "pagination", cursor: string}`
+- **File Messages**: `{objectKey: "type/sha256_hash.json"}`
+- **Idempotent**: Safe to re-run - uses `onConflictDoNothing()` for D1 inserts
+
+**Error Responses**:
+- `401 Unauthorized`: Missing or invalid authentication token
+- `500 Internal Server Error`: R2 listing or queue send failure
+
+### POST /ingest/{objectKey}
+
+Queue a specific R2 object for ingestion into D1 database.
+
+**Authentication**: Requires `Authorization: Bearer <AUTH_TOKEN>` header
+
+**Request**:
+- Method: `POST`
+- URL: `/ingest/{objectKey}` where `{objectKey}` is the full R2 object path
+
+**Example using curl**:
+```bash
+curl -X POST https://your-worker.workers.dev/ingest/chatter/sha256_abc123.json \
+  -H "Authorization: Bearer your-auth-token"
+```
+
+**Success Response** (200 OK):
+```json
+{
+  "success": true,
+  "objectKey": "chatter/sha256_abc123.json",
+  "message": "Queued chatter/sha256_abc123.json for ingestion"
+}
+```
+
+**Error Responses**:
+- `401 Unauthorized`: Missing or invalid authentication token
+- `400 Bad Request`: Empty object key
+- `500 Internal Server Error`: Queue send failure
+
 ## Development
 
 ### Prerequisites
@@ -142,8 +306,47 @@ wrangler dev
 
 The local dev server connects to:
 - Real remote R2 buckets (`sr-json`, `sr-artifact`)
-- Real remote Cloudflare Queue (`sr-queue`)
+- Real remote Cloudflare Queue (`json-processing-queue`)
 - Local D1 database (`.wrangler/state/v3/d1/`)
+
+### Database Migrations
+
+This project uses Drizzle ORM for database schema management with production migration files in `migrations/`.
+
+**Generate new migration from schema changes**:
+```bash
+# After modifying src/db/schema.ts
+pnpm --filter api exec drizzle-kit generate
+```
+
+**Apply migrations to local database**:
+```bash
+# Run migrations against local .wrangler/state/v3/d1/ database
+pnpm --filter api exec wrangler d1 migrations apply DB --local
+```
+
+**Apply migrations to production database**:
+```bash
+# Run migrations against remote Cloudflare D1 database
+pnpm --filter api exec wrangler d1 migrations apply DB --remote
+```
+
+**Reset production database** (⚠️ Destructive):
+```bash
+# Drop all tables and re-apply migrations
+just reset-db-prod
+```
+
+**Query local database**:
+```bash
+# Open SQLite console to local database
+sqlite3 apps/api/.wrangler/state/v3/d1/miniflare-D1DatabaseObject/*.sqlite
+```
+
+**Migration Files**:
+- Location: `apps/api/migrations/`
+- Format: Drizzle SQL migrations with statement breakpoints
+- Execution: Tests use `?raw` imports to stay in sync with production schema
 
 ## Testing
 
@@ -218,13 +421,24 @@ To add new test fixtures:
 
 ## Queue Message Format
 
-The queue consumer expects messages with this structure:
+The queue consumer processes two types of messages:
 
+**File Ingestion Message**:
 ```typescript
 {
-  objectKey: string  // Key of the JSON file in the SR_JSON bucket
+  objectKey: string  // R2 object path: "type/sha256_hash.json"
 }
 ```
+
+**Pagination Message** (used internally for self-paginating bulk ingestion):
+```typescript
+{
+  type: "pagination",  // Special type marker
+  cursor: string       // R2 list cursor for next page
+}
+```
+
+When the queue consumer receives a pagination message, it makes an authenticated internal HTTP request to `/ingest/all?cursor={cursor}` to trigger the next page of ingestion automatically.
 
 ## Deployment
 
@@ -241,7 +455,7 @@ wrangler deploy
 To create the queue in Cloudflare:
 
 ```bash
-wrangler queues create sr-queue
+wrangler queues create json-processing-queue
 ```
 
 Then configure the consumer in `wrangler.jsonc`:
@@ -249,19 +463,28 @@ Then configure the consumer in `wrangler.jsonc`:
 ```json
 "queues": {
   "consumers": [{
-    "queue": "sr-queue",
-    "max_batch_size": 10,
+    "queue": "json-processing-queue",
+    "max_batch_size": 100,
     "max_batch_timeout": 30
   }]
 }
 ```
+
+**Queue Configuration**:
+- **max_batch_size**: 100 (maximum messages per batch)
+- **max_batch_timeout**: 30 seconds (wait time before processing partial batch)
+- **Consumer**: Automatically triggered when messages are available
 
 ## Sending Test Messages
 
 Send messages to the queue for testing:
 
 ```bash
-wrangler queues send sr-queue '{"objectKey":"test.json"}'
+# Test file ingestion message
+wrangler queues send json-processing-queue '{"objectKey":"chatter/sha256_test.json"}'
+
+# Test pagination message (internal use)
+wrangler queues send json-processing-queue '{"type":"pagination","cursor":"test-cursor"}'
 ```
 
 ## Environment Bindings
