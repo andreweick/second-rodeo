@@ -11,8 +11,10 @@ describe('Image Upload Handler', () => {
 	let mockR2Put: ReturnType<typeof vi.fn>;
 
 	beforeEach(() => {
-		// Set up test environment variables
-		env.AUTH_TOKEN = 'test-auth-token';
+		// Mock auth token from Secrets Store
+		env.AUTH_TOKEN = {
+			get: vi.fn().mockResolvedValue('test-auth-token'),
+		} as any;
 
 		// Mock R2 bucket put method
 		mockR2Put = vi.fn().mockResolvedValue(undefined);

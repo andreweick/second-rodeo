@@ -100,8 +100,8 @@ export async function uploadJSON(request: Request, env: Env): Promise<Response> 
 		data: body.data,
 	};
 
-	// Generate object key
-	const objectKey = `sha256_${hash}.json`;
+	// Generate object key with type prefix
+	const objectKey = `${body.type}/sha256_${hash}.json`;
 
 	// Upload to R2
 	try {
@@ -119,6 +119,15 @@ export async function uploadJSON(request: Request, env: Env): Promise<Response> 
 			`R2 upload failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
 			500
 		);
+	}
+
+	// Send message to queue for D1 ingestion
+	try {
+		await env.JSON_QUEUE.send({ objectKey });
+	} catch (error) {
+		console.error(`Failed to send queue message for ${objectKey}:`, error);
+		// Note: File is in R2 but won't be processed automatically
+		// Could be retried later via bulk ingestion endpoint
 	}
 
 	// Build response

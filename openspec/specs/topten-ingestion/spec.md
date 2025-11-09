@@ -1,0 +1,202 @@
+# topten-ingestion Specification
+
+## Purpose
+TBD - created by archiving change add-bulk-d1-ingestion. Update Purpose after archive.
+## Requirements
+### Requirement: Hot/Cold Storage Architecture
+
+The system SHALL maintain top ten list data using a hot/cold storage architecture where D1 stores minimal metadata for filtering and R2 stores complete content.
+
+#### Scenario: Minimal metadata stored in D1
+
+- **WHEN** a top ten list is ingested from wrapped JSON
+- **THEN** D1 SHALL store only: id, show, date, title, r2Key, createdAt, updatedAt
+- **AND** D1 SHALL NOT store: items array, timestamp, year, month, slug, itemCount, sourceUrl, dataQuality
+
+#### Scenario: Full content stored in R2
+
+- **WHEN** a top ten list is ingested
+- **THEN** R2 SHALL store complete wrapped JSON with type, id, and data containing all fields including items array, timestamp, year, month, slug, itemCount, sourceUrl, and dataQuality
+- **AND** the R2 object key SHALL match the r2Key field in D1
+
+#### Scenario: D1 enables filtering without R2 fetch
+
+- **WHEN** listing top ten lists with filters
+- **THEN** D1 SHALL provide id, show, date, and title for display
+- **AND** no R2 fetch SHALL be required for list views
+
+#### Scenario: R2 fetch required for full content
+
+- **WHEN** displaying a specific top ten list
+- **THEN** the system SHALL fetch the complete JSON from R2 using r2Key
+- **AND** the JSON data object SHALL include the items array and all metadata
+
+#### Scenario: Year and month derivable from date
+
+- **WHEN** querying for lists by year
+- **THEN** the system SHALL use SQLite date function: `WHERE strftime('%Y', date) = '1990'`
+- **AND** NOT require a separate year column
+
+#### Scenario: Month filtering using date functions
+
+- **WHEN** querying for lists by year-month
+- **THEN** the system SHALL use SQLite date function: `WHERE strftime('%Y-%m', date) = '1990-05'`
+- **AND** NOT require a separate month column
+
+### Requirement: Top Ten List Ingestion Endpoints
+
+The system SHALL provide authenticated HTTP endpoints to trigger bulk or single-file ingestion of all content types from R2.
+
+#### Scenario: Successful bulk ingestion
+
+- **WHEN** an authenticated POST request is made to /ingest/all
+- **THEN** the system SHALL list all objects in SR_JSON bucket using pagination
+- **AND** the system SHALL use sendBatch() to queue up to 1000 messages per page
+- **AND** the system SHALL iterate through all pages until cursor is undefined
+- **AND** the response SHALL return JSON with total count of messages queued
+
+#### Scenario: Successful single-file ingestion
+
+- **WHEN** an authenticated POST request is made to /ingest/{objectKey}
+- **THEN** the system SHALL send a queue message for the specified objectKey
+- **AND** the response SHALL return JSON with queued: 1 and the objectKey
+
+#### Scenario: Authentication required
+
+- **WHEN** POST /ingest/* is called without valid AUTH_TOKEN
+- **THEN** the system SHALL return 401 Unauthorized status
+
+#### Scenario: R2 listing error handling
+
+- **WHEN** R2 list operation fails during bulk ingestion
+- **THEN** the system SHALL return 500 status with error message
+- **AND** no queue messages SHALL be sent
+
+#### Scenario: Pagination handling
+
+- **WHEN** R2 bucket contains more than 1000 objects
+- **THEN** the system SHALL use cursor-based pagination
+- **AND** the system SHALL process all pages within Worker timeout limits (< 30 seconds)
+
+### Requirement: Queue Message Processing
+
+The system SHALL process queue messages by validating wrapped JSON structure, routing by type field, and inserting minimal metadata to D1.
+
+#### Scenario: Successful ingestion from wrapped JSON
+
+- **WHEN** a queue message with objectKey `sha256_{hash}.json` is received
+- **THEN** the system SHALL fetch wrapped JSON from R2
+- **AND** unwrap to extract type, id, and data fields
+- **AND** route to topten validator when type equals "topten"
+- **AND** validate required fields in data: show, date, title
+- **AND** insert record to topten table with: id (from envelope), show, date, title, r2Key set to objectKey
+- **AND** mark message as successfully processed
+
+#### Scenario: Missing required field in data
+
+- **WHEN** a list JSON data object is missing a required field (show, date, or title)
+- **THEN** the system SHALL log validation error with field name
+- **AND** NOT insert record to D1
+- **AND** mark message as failed
+
+#### Scenario: Duplicate ID handling
+
+- **WHEN** a list with existing id is processed
+- **THEN** the system SHALL attempt INSERT
+- **AND** SQLite UNIQUE constraint SHALL prevent duplicate
+- **AND** the system SHALL log the duplicate attempt
+- **AND** continue processing other messages
+
+#### Scenario: R2 fetch failure
+
+- **WHEN** fetching JSON from R2 fails
+- **THEN** the system SHALL log error with objectKey
+- **AND** mark message as failed for retry
+
+### Requirement: Idempotent Re-Ingestion
+
+The system SHALL support idempotent re-ingestion of top ten lists without causing data corruption or duplicates.
+
+#### Scenario: Safe re-ingestion
+
+- **WHEN** /ingest/all is called multiple times
+- **THEN** each call SHALL queue all messages again (including all content types)
+- **AND** queue processing SHALL handle duplicate ids gracefully via UNIQUE constraint
+- **AND** final D1 state SHALL contain exactly 1,199 list records
+
+#### Scenario: Deterministic IDs
+
+- **WHEN** the same source data is processed
+- **THEN** list ids SHALL be deterministic (computed by upload API from data hash)
+- **AND** re-ingestion SHALL result in same id values
+
+### Requirement: R2 Object Key Format
+
+The system SHALL use consistent R2 object key formats for top ten list data to enable predictable storage and retrieval.
+
+#### Scenario: Flat file structure
+
+- **WHEN** storing or retrieving list JSON
+- **THEN** R2 key format SHALL be `sha256_{hash}.json` (content-addressable at bucket root)
+- **AND** {hash} SHALL match the id field in the envelope (without `sha256:` prefix)
+- **AND** content type SHALL be determined by envelope `type` field, not object key path
+
+#### Scenario: Direct path computation
+
+- **WHEN** computing R2 path from list id
+- **THEN** the system SHALL use: `topten/${id.replace('sha256:', 'sha256_')}.json`
+- **AND** no additional lookups SHALL be required
+
+### Requirement: Filtering Query Optimization
+
+The system SHALL structure D1 schema and queries to enable fast filtering on top ten list metadata without scanning large fields or fetching from R2.
+
+#### Scenario: Filter by date range
+
+- **WHEN** querying lists for a specific date range
+- **THEN** query SHALL use: `WHERE date >= '1990-01-01' AND date < '1991-01-01'`
+- **AND** NOT require R2 fetches
+- **AND** return results in under 100ms for 1,199 records
+
+#### Scenario: Filter by year using date function
+
+- **WHEN** querying all lists for a specific year
+- **THEN** query SHALL use: `WHERE strftime('%Y', date) = '1990'`
+- **OR** use range query: `WHERE date >= '1990-01-01' AND date < '1991-01-01'`
+
+#### Scenario: Fast filtering by show
+
+- **WHEN** filtering lists by show name
+- **THEN** D1 query SHALL use: `WHERE show = 'Late Night with David Letterman'`
+- **AND** return results without R2 fetches
+
+#### Scenario: Sort by date
+
+- **WHEN** sorting lists chronologically
+- **THEN** query SHALL use: `ORDER BY date DESC`
+- **AND** return sorted results without R2 fetches
+
+### Requirement: Validation Logic
+
+The system SHALL validate top ten list JSON structure before inserting to D1 to ensure data integrity.
+
+#### Scenario: Required field validation
+
+- **WHEN** validating list JSON data object
+- **THEN** the system SHALL require fields: show, date, title
+- **AND** throw error if any required field is missing
+
+#### Scenario: Field type validation
+
+- **WHEN** validating field types
+- **THEN** id (from envelope) SHALL be string starting with 'sha256:'
+- **AND** show SHALL be non-empty string
+- **AND** date SHALL be string in YYYY-MM-DD format
+- **AND** title SHALL be non-empty string
+
+#### Scenario: Optional field handling
+
+- **WHEN** validating list JSON data object
+- **THEN** items, sourceUrl, and dataQuality SHALL be optional
+- **AND** missing optional fields SHALL NOT cause validation failure
+

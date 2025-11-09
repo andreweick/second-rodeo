@@ -10,8 +10,10 @@ describe('JSON Upload Handler', () => {
 	let mockR2Put: ReturnType<typeof vi.fn>;
 
 	beforeEach(() => {
-		// Set up test environment variables
-		env.AUTH_TOKEN = 'test-auth-token';
+		// Mock auth token from Secrets Store
+		env.AUTH_TOKEN = {
+			get: vi.fn().mockResolvedValue('test-auth-token'),
+		} as any;
 
 		// Mock R2 bucket put method
 		mockR2Put = vi.fn().mockResolvedValue(undefined);
@@ -55,7 +57,7 @@ describe('JSON Upload Handler', () => {
 		// Response has objectKey and id fields
 		expect(data.objectKey).toBeDefined();
 		expect(typeof data.objectKey).toBe('string');
-		expect(data.objectKey).toMatch(/^sha256_[a-f0-9]{64}\.json$/);
+		expect(data.objectKey).toMatch(/^chatter\/sha256_[a-f0-9]{64}\.json$/);
 
 		expect(data.id).toBeDefined();
 		expect(typeof data.id).toBe('string');
@@ -64,7 +66,7 @@ describe('JSON Upload Handler', () => {
 		// Verify R2 put was called correctly
 		expect(mockR2Put).toHaveBeenCalledTimes(1);
 		const [objectKey, content, options] = mockR2Put.mock.calls[0];
-		expect(objectKey).toMatch(/^sha256_[a-f0-9]{64}\.json$/);
+		expect(objectKey).toMatch(/^chatter\/sha256_[a-f0-9]{64}\.json$/);
 		expect(typeof content).toBe('string');
 
 		// Verify the envelope structure

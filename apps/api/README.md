@@ -48,12 +48,22 @@ This generates a 256-bit (32 byte) random token encoded in base64, which will be
 "vars": {
   "CLOUDFLARE_ACCOUNT_ID": "your-actual-account-id"
 }
-2. Set secrets (for production):
+2. Set up Secret Store and add secrets:
 
 ```sh
+# Create a Secret Store (if you don't have one)
+wrangler secrets-store store create my-secrets --remote
+
+# List Secret Stores to get the ID
+wrangler secrets-store store list
+
+# Add AUTH_TOKEN to the Secret Store
+wrangler secrets-store secret put AUTH_TOKEN --store-id <your-store-id>
+
+# Legacy: Set CLOUDFLARE_MEDIA_TOKEN using old secrets (deprecated)
 pnpm --filter api exec wrangler secret put CLOUDFLARE_MEDIA_TOKEN
-pnpm --filter api exec wrangler secret put AUTH_TOKEN
 ```
+
 3. For local testing, create .dev.vars file in apps/api/:
 CLOUDFLARE_MEDIA_TOKEN=your-media-token
 AUTH_TOKEN=your-test-auth-token
@@ -261,9 +271,10 @@ Configured in `wrangler.jsonc`:
 - `DB` - D1 database (`app_db`)
 - `SR_JSON` - R2 bucket for JSON files
 - `SR_ARTIFACT` - R2 bucket for artifacts
+- `SECRETS` - Secret Store binding for sensitive data
 - `CLOUDFLARE_ACCOUNT_ID` - Your Cloudflare account ID (variable)
-- `CLOUDFLARE_MEDIA_TOKEN` - Cloudflare Media API token (secret)
-- `AUTH_TOKEN` - API authentication token (secret)
+- `CLOUDFLARE_MEDIA_TOKEN` - Cloudflare Media API token (legacy secret)
+- `AUTH_TOKEN` - API authentication token (stored in Secret Store)
 
 ### Setting Up Environment Variables
 
@@ -274,13 +285,16 @@ Configured in `wrangler.jsonc`:
    }
    ```
 
-2. **Set secrets** using Wrangler CLI:
+2. **Set up Secret Store and add secrets**:
    ```bash
-   # Set Cloudflare Media API token (create at dash.cloudflare.com with Images:Edit permission)
-   wrangler secret put CLOUDFLARE_MEDIA_TOKEN
+   # List Secret Stores to get your Store ID
+   wrangler secrets-store store list
 
-   # Set API authentication token (generate a random secure string)
-   wrangler secret put AUTH_TOKEN
+   # Add AUTH_TOKEN to the Secret Store
+   wrangler secrets-store secret put AUTH_TOKEN --store-id <your-store-id>
+
+   # Legacy: Set Cloudflare Media API token using old secrets
+   wrangler secret put CLOUDFLARE_MEDIA_TOKEN
    ```
 
 3. **For local development**, create `.dev.vars` file:
