@@ -6,10 +6,10 @@ import { sql } from "drizzle-orm";
 // ============================================================================
 
 // 1. Chatter (Social Posts)
+// Hot storage: minimal queryable metadata only
+// Cold storage (R2): complete wrapped JSON with all fields
 export const chatter = sqliteTable("chatter", {
   id: text("id").primaryKey(),
-  title: text("title").notNull(),
-  date: text("date").notNull(), // YYYY-MM-DD format
   datePosted: integer("date_posted", { mode: "timestamp" }).notNull(),
   year: integer("year").notNull(),
   month: text("month").notNull(), // YYYY-MM format
@@ -21,11 +21,11 @@ export const chatter = sqliteTable("chatter", {
 });
 
 // 2. Quotes
+// Hot storage: minimal queryable metadata only
+// Cold storage (R2): complete wrapped JSON with all fields
 export const quotes = sqliteTable("quotes", {
   id: text("id").primaryKey(),
-  text: text("text").notNull(),
   author: text("author").notNull(),
-  date: text("date").notNull(), // YYYY-MM-DD format
   dateAdded: integer("date_added", { mode: "timestamp" }).notNull(),
   year: integer("year").notNull(),
   month: text("month").notNull(), // YYYY-MM format
@@ -37,44 +37,31 @@ export const quotes = sqliteTable("quotes", {
 });
 
 // 3. Films
+// Hot storage: minimal queryable metadata only
+// Cold storage (R2): complete wrapped JSON with all fields
 export const films = sqliteTable("films", {
   id: text("id").primaryKey(),
-  title: text("title").notNull(),
-  year: integer("year").notNull(), // Film release year
   yearWatched: integer("year_watched").notNull(),
   dateWatched: integer("date_watched", { mode: "timestamp" }).notNull(),
-  date: text("date").notNull(), // YYYY-MM-DD format
   month: text("month").notNull(), // YYYY-MM format
   slug: text("slug").notNull().unique(),
   rewatch: integer("rewatch", { mode: "boolean" }).notNull().default(false),
-  rewatchCount: integer("rewatch_count").notNull().default(0),
   publish: integer("publish", { mode: "boolean" }).notNull().default(true),
   tmdbId: text("tmdb_id"),
-  posterUrl: text("poster_url"),
   letterboxdId: text("letterboxd_id"),
-  letterboxdUri: text("letterboxd_uri"),
   r2Key: text("r2_key").notNull(),
   createdAt: integer("created_at", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`),
   updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`).$onUpdate(() => sql`(unixepoch())`),
 });
 
 // 4. Checkins
+// Hot storage: minimal queryable metadata only
+// Cold storage (R2): complete wrapped JSON with all fields
 export const checkins = sqliteTable("checkins", {
   id: text("id").primaryKey(),
   venueId: text("venue_id").notNull(),
-  venueName: text("venue_name").notNull(),
-  foursquareUrl: text("foursquare_url"),
   latitude: real("latitude").notNull(),
   longitude: real("longitude").notNull(),
-  formattedAddress: text("formatted_address"),
-  street: text("street"),
-  city: text("city"),
-  state: text("state"),
-  postalCode: text("postal_code"),
-  country: text("country"),
-  neighborhood: text("neighborhood"),
-  date: text("date").notNull(), // YYYY-MM-DD format
-  time: text("time").notNull(), // HH:MM:SS format
   datetime: integer("datetime", { mode: "timestamp" }).notNull(),
   year: integer("year").notNull(),
   month: text("month").notNull(), // YYYY-MM format
@@ -86,20 +73,14 @@ export const checkins = sqliteTable("checkins", {
 });
 
 // 5. Shakespeare Works
+// Hot storage: minimal queryable metadata only
+// Cold storage (R2): complete wrapped JSON with all fields
 export const shakespeare = sqliteTable("shakespeare", {
   id: text("id").primaryKey(),
   workId: text("work_id").notNull(),
-  workTitle: text("work_title").notNull(),
-  genreCode: text("genre_code").notNull(),
-  genreName: text("genre_name").notNull(),
   act: integer("act").notNull(),
   scene: integer("scene").notNull(),
-  paragraphId: integer("paragraph_id").notNull(),
-  paragraphNum: integer("paragraph_num").notNull(),
   characterId: text("character_id").notNull(),
-  characterName: text("character_name").notNull(),
-  isStageDirection: integer("is_stage_direction", { mode: "boolean" }).notNull(),
-  charCount: integer("char_count").notNull(),
   wordCount: integer("word_count").notNull(),
   timestamp: integer("timestamp", { mode: "timestamp" }).notNull(),
   r2Key: text("r2_key").notNull(),
@@ -108,6 +89,8 @@ export const shakespeare = sqliteTable("shakespeare", {
 });
 
 // 6. Top Ten Lists
+// Hot storage: minimal queryable metadata only
+// Cold storage (R2): complete wrapped JSON with all fields
 export const topten = sqliteTable("topten", {
   id: text("id").primaryKey(),
   show: text("show").notNull(),
@@ -116,9 +99,6 @@ export const topten = sqliteTable("topten", {
   year: integer("year").notNull(),
   month: text("month").notNull(),
   slug: text("slug").notNull().unique(),
-  title: text("title").notNull(),
-  itemCount: integer("item_count").notNull().default(10),
-  sourceUrl: text("source_url"),
   r2Key: text("r2_key").notNull(),
   createdAt: integer("created_at", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`),
   updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`).$onUpdate(() => sql`(unixepoch())`),

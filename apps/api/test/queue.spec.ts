@@ -5,9 +5,7 @@ import { handleQueue } from '../src/handlers/queue';
 
 // Import migration files as raw strings
 // @ts-expect-error
-import migration0 from '../migrations/0000_orange_retro_girl.sql?raw';
-// @ts-expect-error
-import migration1 from '../migrations/0001_normal_sue_storm.sql?raw';
+import migration0 from '../migrations/0000_supreme_quicksilver.sql?raw';
 
 // Import fixture files as raw strings
 // @ts-expect-error
@@ -54,7 +52,7 @@ function createBatch(messages: Message<unknown>[]): MessageBatch<unknown> {
  */
 async function runMigrations(): Promise<void> {
 	// Migrations imported as raw strings at build time
-	const migrations = [migration0, migration1];
+	const migrations = [migration0];
 
 	// Execute each migration file
 	for (const migrationSql of migrations) {

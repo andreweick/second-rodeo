@@ -18,7 +18,21 @@ export interface Env {
 	SR_ARTIFACT: R2Bucket;
 
 	/**
-	 * Authentication token for API endpoints (secret)
+	 * Queue for processing JSON files
 	 */
-	AUTH_TOKEN: string;
+	JSON_QUEUE: Queue;
+
+	/**
+	 * Auth token from Secrets Store
+	 */
+	AUTH_TOKEN: {
+		get(): Promise<string>;
+	};
+
+	/**
+	 * Cloudflare Media token from Secrets Store
+	 */
+	CLOUDFLARE_MEDIA_TOKEN: {
+		get(): Promise<string>;
+	};
 }

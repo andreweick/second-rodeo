@@ -34,8 +34,6 @@ CREATE TABLE `bookmarks_tags` (
 --> statement-breakpoint
 CREATE TABLE `chatter` (
 	`id` text PRIMARY KEY NOT NULL,
-	`title` text NOT NULL,
-	`date` text NOT NULL,
 	`date_posted` integer NOT NULL,
 	`year` integer NOT NULL,
 	`month` text NOT NULL,
@@ -58,19 +56,8 @@ CREATE TABLE `chatter_tags` (
 CREATE TABLE `checkins` (
 	`id` text PRIMARY KEY NOT NULL,
 	`venue_id` text NOT NULL,
-	`venue_name` text NOT NULL,
-	`foursquare_url` text,
 	`latitude` real NOT NULL,
 	`longitude` real NOT NULL,
-	`formatted_address` text,
-	`street` text,
-	`city` text,
-	`state` text,
-	`postal_code` text,
-	`country` text,
-	`neighborhood` text,
-	`date` text NOT NULL,
-	`time` text NOT NULL,
 	`datetime` integer NOT NULL,
 	`year` integer NOT NULL,
 	`month` text NOT NULL,
@@ -84,20 +71,14 @@ CREATE TABLE `checkins` (
 CREATE UNIQUE INDEX `checkins_slug_unique` ON `checkins` (`slug`);--> statement-breakpoint
 CREATE TABLE `films` (
 	`id` text PRIMARY KEY NOT NULL,
-	`title` text NOT NULL,
-	`year` integer NOT NULL,
 	`year_watched` integer NOT NULL,
 	`date_watched` integer NOT NULL,
-	`date` text NOT NULL,
 	`month` text NOT NULL,
 	`slug` text NOT NULL,
 	`rewatch` integer DEFAULT false NOT NULL,
-	`rewatch_count` integer DEFAULT 0 NOT NULL,
 	`publish` integer DEFAULT true NOT NULL,
 	`tmdb_id` text,
-	`poster_url` text,
 	`letterboxd_id` text,
-	`letterboxd_uri` text,
 	`r2_key` text NOT NULL,
 	`created_at` integer DEFAULT (unixepoch()) NOT NULL,
 	`updated_at` integer DEFAULT (unixepoch()) NOT NULL
@@ -149,9 +130,7 @@ CREATE TABLE `photographs_tags` (
 --> statement-breakpoint
 CREATE TABLE `quotes` (
 	`id` text PRIMARY KEY NOT NULL,
-	`text` text NOT NULL,
 	`author` text NOT NULL,
-	`date` text NOT NULL,
 	`date_added` integer NOT NULL,
 	`year` integer NOT NULL,
 	`month` text NOT NULL,
@@ -174,17 +153,9 @@ CREATE TABLE `quotes_tags` (
 CREATE TABLE `shakespeare` (
 	`id` text PRIMARY KEY NOT NULL,
 	`work_id` text NOT NULL,
-	`work_title` text NOT NULL,
-	`genre_code` text NOT NULL,
-	`genre_name` text NOT NULL,
 	`act` integer NOT NULL,
 	`scene` integer NOT NULL,
-	`paragraph_id` integer NOT NULL,
-	`paragraph_num` integer NOT NULL,
 	`character_id` text NOT NULL,
-	`character_name` text NOT NULL,
-	`is_stage_direction` integer NOT NULL,
-	`char_count` integer NOT NULL,
 	`word_count` integer NOT NULL,
 	`timestamp` integer NOT NULL,
 	`r2_key` text NOT NULL,
@@ -206,9 +177,6 @@ CREATE TABLE `topten` (
 	`year` integer NOT NULL,
 	`month` text NOT NULL,
 	`slug` text NOT NULL,
-	`title` text NOT NULL,
-	`item_count` integer DEFAULT 10 NOT NULL,
-	`source_url` text,
 	`r2_key` text NOT NULL,
 	`created_at` integer DEFAULT (unixepoch()) NOT NULL,
 	`updated_at` integer DEFAULT (unixepoch()) NOT NULL
@@ -228,5 +196,3 @@ CREATE TABLE `videos` (
 	`created_at` integer DEFAULT (unixepoch()) NOT NULL,
 	`updated_at` integer DEFAULT (unixepoch()) NOT NULL
 );
---> statement-breakpoint
-DROP TABLE `docs`;

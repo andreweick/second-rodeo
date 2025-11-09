@@ -16,7 +16,7 @@ The system SHALL maintain quote data using a hot/cold storage architecture where
 
 - **WHEN** a quote is ingested
 - **THEN** R2 SHALL store complete wrapped JSON with type, id, and data containing all fields including text, date, tags
-- **AND** the R2 object key SHALL match the file path pattern `quotes/sha256_{hash}.json`
+- **AND** the R2 object key SHALL match the file path pattern `sha256_{hash}.json`
 
 #### Scenario: Quote text retrieval from R2
 
@@ -24,20 +24,27 @@ The system SHALL maintain quote data using a hot/cold storage architecture where
 - **THEN** the system SHALL fetch text from R2 JSON data object
 - **OR** the system MAY use author/slug as fallback identifiers
 
-### Requirement: Bulk Quotes Ingestion Endpoint
+### Requirement: Quotes Ingestion Endpoints
 
-The system SHALL provide an authenticated HTTP endpoint to trigger bulk ingestion of all quote files from R2.
+The system SHALL provide authenticated HTTP endpoints to trigger bulk or single-file ingestion of all content types from R2.
 
-#### Scenario: Successful bulk ingestion trigger
+#### Scenario: Successful bulk ingestion
 
-- **WHEN** an authenticated POST request is made to /quotes/ingest
-- **THEN** the system SHALL list all objects with R2 prefix `quotes/`
-- **AND** the system SHALL send one queue message per quote file
-- **AND** the response SHALL return JSON with count of messages queued
+- **WHEN** an authenticated POST request is made to /ingest/all
+- **THEN** the system SHALL list all objects in SR_JSON bucket using pagination
+- **AND** the system SHALL use sendBatch() to queue up to 1000 messages per page
+- **AND** the system SHALL iterate through all pages until cursor is undefined
+- **AND** the response SHALL return JSON with total count of messages queued
+
+#### Scenario: Successful single-file ingestion
+
+- **WHEN** an authenticated POST request is made to /ingest/{objectKey}
+- **THEN** the system SHALL send a queue message for the specified objectKey
+- **AND** the response SHALL return JSON with queued: 1 and the objectKey
 
 #### Scenario: Authentication required
 
-- **WHEN** POST /quotes/ingest is called without valid AUTH_TOKEN
+- **WHEN** POST /ingest/* is called without valid AUTH_TOKEN
 - **THEN** the system SHALL return 401 Unauthorized status
 
 #### Scenario: R2 listing failure
@@ -46,16 +53,22 @@ The system SHALL provide an authenticated HTTP endpoint to trigger bulk ingestio
 - **THEN** the system SHALL return 500 status with error message
 - **AND** no queue messages SHALL be sent
 
+#### Scenario: Pagination handling
+
+- **WHEN** R2 bucket contains more than 1000 objects
+- **THEN** the system SHALL use cursor-based pagination
+- **AND** the system SHALL process all pages within Worker timeout limits (< 30 seconds)
+
 ### Requirement: Quotes Queue Processing
 
-The system SHALL process quote queue messages by validating wrapped JSON structure and inserting to D1.
+The system SHALL process queue messages by validating wrapped JSON structure, routing by type field, and inserting to D1.
 
 #### Scenario: Valid quote ingestion from wrapped JSON
 
-- **WHEN** a queue message with objectKey `quotes/sha256_{hash}.json` is received
+- **WHEN** a queue message with objectKey `sha256_{hash}.json` is received
 - **THEN** the system SHALL fetch wrapped JSON from R2
 - **AND** unwrap to extract type, id, and data fields
-- **AND** validate type equals "quotes"
+- **AND** route to quotes validator when type equals "quotes"
 - **AND** validate required fields in data: author, date_added, year, month, slug
 - **AND** validate text field exists in data (for R2 completeness)
 - **AND** insert record to quotes table with only: id (from envelope), author, dateAdded, year, month, slug, publish, r2Key
@@ -81,8 +94,8 @@ The system SHALL support idempotent re-ingestion of quotes data without causing 
 
 #### Scenario: Re-running full ingestion
 
-- **WHEN** /quotes/ingest is called multiple times
-- **THEN** each call SHALL queue all quote messages again
+- **WHEN** /ingest/all is called multiple times
+- **THEN** each call SHALL queue all messages again (including all content types)
 - **AND** queue processing SHALL handle duplicate slugs gracefully via UNIQUE constraint
 - **AND** final D1 state SHALL contain exactly one record per unique quote slug
 
@@ -99,8 +112,9 @@ The system SHALL use consistent R2 object key formats for quotes data to enable 
 #### Scenario: Quote file naming
 
 - **WHEN** storing or retrieving quote JSON
-- **THEN** R2 key format SHALL be `quotes/sha256_{hash}.json`
+- **THEN** R2 key format SHALL be `sha256_{hash}.json` (content-addressable at bucket root)
 - **AND** {hash} SHALL match the id field in the envelope (without `sha256:` prefix)
+- **AND** content type SHALL be determined by envelope `type` field, not object key path
 
 ### Requirement: Temporal Query Optimization
 

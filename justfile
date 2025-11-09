@@ -24,6 +24,31 @@ migrate-local:
 migrate-prod:
     pnpm --filter api exec wrangler d1 migrations apply DB --remote
 
+# Reset production database (drop all tables and re-apply migrations)
+reset-db-prod:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    echo "⚠️  WARNING: This will DROP ALL TABLES in the production database!"
+    read -p "Are you sure? Type 'yes' to continue: " confirm
+    if [ "$confirm" != "yes" ]; then
+        echo "Aborted."
+        exit 1
+    fi
+    echo "Fetching list of tables..."
+    tables=$(pnpm --filter api exec wrangler d1 execute DB --remote --json --command "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%' AND name != 'd1_migrations';" | jq -r '.[0].results[] | .name')
+    if [ -z "$tables" ]; then
+        echo "No tables to drop."
+    else
+        echo "Dropping tables: $tables"
+        for table in $tables; do
+            echo "Dropping $table..."
+            pnpm --filter api exec wrangler d1 execute DB --remote --command "DROP TABLE IF EXISTS \`$table\`;"
+        done
+    fi
+    echo "Re-applying migrations..."
+    pnpm --filter api exec wrangler d1 migrations apply DB --remote
+    echo "✅ Database reset complete!"
+
 # Open sqlite3 console to local DB
 db:
     sqlite3 apps/api/.wrangler/state/v3/d1/miniflare-D1DatabaseObject/*.sqlite
@@ -76,3 +101,7 @@ curl-image-prod IMAGE_PATH:
     curl -X POST https://api.missionfocus.workers.dev/images \
       -H "Authorization: Bearer $AUTH_TOKEN" \
       -F "file=@{{IMAGE_PATH}}"
+
+# Clean up local development state (R2, D1, KV, Durable Objects)
+cleanup-dev:
+    rm -rf apps/api/.wrangler/state

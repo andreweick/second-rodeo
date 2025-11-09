@@ -4,9 +4,14 @@ import { processJsonFromR2 } from '../services/json-processor';
 /**
  * Message body structure expected from the queue
  */
-export interface QueueMessageBody {
-	objectKey: string;
-}
+export type QueueMessageBody =
+	| {
+			objectKey: string;
+	  }
+	| {
+			type: 'pagination';
+			cursor: string;
+	  };
 
 /**
  * Handles queue message batches
@@ -18,17 +23,43 @@ export async function handleQueue(batch: MessageBatch<unknown>, env: Env): Promi
 	for (const message of batch.messages) {
 		try {
 			// Validate message structure
-			if (
-				!message.body ||
-				typeof message.body !== 'object' ||
-				!('objectKey' in message.body) ||
-				typeof message.body.objectKey !== 'string'
-			) {
+			if (!message.body || typeof message.body !== 'object') {
 				console.error(`Message ${message.id} has invalid structure:`, message.body);
 				continue;
 			}
 
-			const { objectKey } = message.body;
+			const body = message.body as QueueMessageBody;
+
+			// Check if this is a pagination message
+			if ('type' in body && body.type === 'pagination') {
+				console.log(`Processing pagination message ${message.id} with cursor`);
+
+				// Get auth token to call our own endpoint
+				const authToken = await env.AUTH_TOKEN.get();
+
+				// Trigger next page of ingestion
+				const response = await fetch(`https://api.missionfocus.workers.dev/ingest/all?cursor=${body.cursor}`, {
+					method: 'POST',
+					headers: {
+						Authorization: `Bearer ${authToken}`,
+					},
+				});
+
+				if (!response.ok) {
+					console.error(`Pagination request failed: ${response.status} ${await response.text()}`);
+				} else {
+					console.log(`Pagination request successful`);
+				}
+				continue;
+			}
+
+			// Otherwise, it's a file ingestion message
+			if (!('objectKey' in body) || typeof body.objectKey !== 'string') {
+				console.error(`Message ${message.id} missing objectKey:`, message.body);
+				continue;
+			}
+
+			const { objectKey } = body;
 			console.log(`Processing message ${message.id} for object: ${objectKey}`);
 
 			// Process the JSON file from R2 and record to database

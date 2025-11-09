@@ -137,29 +137,89 @@ function validateAndMapChatter(envelope: unknown, objectKey: string): NewChatter
 - Keep titles in D1: Simpler but wastes ~1MB across all types
 - More aggressive removal: Would require R2 fetches for basic listing
 
-### Decision 4: Per-Type Ingestion Endpoints
+### Decision 4: Simplified Ingestion Endpoints with Pagination
 
-**Choice:** `POST /chatter/ingest`, `POST /checkins/ingest`, etc.
+**Choice:** `POST /ingest/all` for bulk, `POST /ingest/{objectKey}` for single-file
 
 **Implementation:**
 ```typescript
-// /chatter/ingest
-const objects = await bucket.list({ prefix: 'chatter/' });
-for (const obj of objects.objects) {
-  await queue.send({ objectKey: obj.key });
+// Route handler
+if (url.pathname === '/ingest/all') {
+  // Bulk ingestion: list all R2 with pagination, queue all
+  return handleBulkIngestAll(env);
+} else if (url.pathname.startsWith('/ingest/')) {
+  // Single file: /ingest/sha256_abc.json
+  const objectKey = url.pathname.replace('/ingest/', '');
+  return handleSingleIngest(objectKey, env);
 }
-return { queued: objects.objects.length };
+
+// Bulk ingestion implementation with pagination
+async function handleBulkIngestAll(env: Env) {
+  let cursor: string | undefined = undefined;
+  let totalQueued = 0;
+
+  do {
+    // Fetch page of 1000 objects
+    const page = await env.SR_JSON.list({
+      cursor,
+      limit: 1000
+    });
+
+    console.log(`Listing page with ${page.objects.length} objects`);
+
+    // Queue entire page at once using sendBatch
+    const messages = page.objects.map(obj => ({
+      body: { objectKey: obj.key }
+    }));
+
+    await env.INGEST_QUEUE.sendBatch(messages);
+    totalQueued += page.objects.length;
+
+    console.log(`Queued ${totalQueued} total so far...`);
+
+    // Get cursor for next page
+    cursor = page.truncated ? page.cursor : undefined;
+
+  } while (cursor);
+
+  return new Response(JSON.stringify({ queued: totalQueued }), { status: 200 });
+}
+
+// Single file ingestion implementation
+async function handleSingleIngest(objectKey: string, env: Env) {
+  await env.INGEST_QUEUE.send({ objectKey });
+  return new Response(JSON.stringify({ queued: 1, objectKey }), { status: 200 });
+}
 ```
 
 **Rationale:**
-- RESTful pattern (type in URL)
-- Clear authentication per type
-- Simple R2 prefix filtering
-- Idempotent (can re-run safely)
+- Simplified API surface: 2 endpoints instead of 12
+- Pagination with sendBatch() handles 100K+ files within Worker timeout (~15s for 100K)
+- Consumer does type routing (no pre-filtering bottleneck)
+- Content-addressable storage at root level
+- Upload endpoint stays focused on storage only
+- Single implementation, no per-type code duplication
+
+**Performance:**
+- 50K files: ~7.5 seconds (50 pages × 150ms)
+- 100K files: ~15 seconds (100 pages × 150ms)
+- 150K files: ~22.5 seconds (safe, 7.5s buffer)
+- 200K+ files: Would need chunked approach
+
+**Use cases:**
+- Bulk: `POST /ingest/all` → queues all 50K+ files in one call
+- Single: `POST /ingest/sha256_abc.json` → re-process one file
+- Re-ingestion: Can re-run `/ingest/all` safely (idempotent via UNIQUE constraints)
+
+**Trade-offs:**
+- No per-type selective ingestion (bulk is all-or-nothing)
+- Consumer processes all types (but fast, type mismatch just skips)
+- Slightly more queue messages (but negligible cost, skipped quickly)
 
 **Alternatives considered:**
-- Generic /ingest?type=chatter: Less RESTful, type validation needed
-- Batch with progress tracking: Complex, unnecessary for one-time ops
+- Per-type endpoints with pre-filtering: Would timeout on 50K files (41+ minutes)
+- Subdirectory organization: Would require re-uploading all files
+- Chunked pagination API: More complex, not needed for current scale
 
 ### Decision 5: Preserve Phase1-* Field Mappings
 
@@ -237,11 +297,11 @@ try {
 - **Mitigation:** Migration handled separately (out of scope)
 - **Validation:** Validators will fail clearly on flat JSON
 
-### Trade-off: Per-Type Endpoints vs Generic
+### Trade-off: No Selective Type Ingestion
 
-- **Impact:** More endpoints to document and maintain
-- **Mitigation:** Pattern is identical, code can be DRYed up
-- **Benefit:** Clear authentication boundaries, simpler R2 prefix logic
+- **Impact:** Cannot selectively re-ingest just one content type
+- **Mitigation:** Single-file endpoint allows targeted re-processing
+- **Benefit:** Simpler API, avoids timeout issues with large datasets
 
 ## Migration Plan
 
@@ -263,9 +323,9 @@ just test           # Verify all tests pass
 
 **Phase 3: Add Ingestion Endpoints**
 ```bash
-# Add 6 POST /{type}/ingest endpoints
+# Add 2 POST /ingest endpoints (all and single-file)
 # Implement AUTH_TOKEN checks
-# Implement R2 listing + queueing
+# Implement R2 pagination with sendBatch()
 just test           # Integration tests
 ```
 
@@ -273,29 +333,31 @@ just test           # Integration tests
 ```bash
 # Upload sample wrapped JSON to local R2
 wrangler dev
-curl -X POST http://localhost:8787/chatter/ingest -H "Authorization: Bearer $TOKEN"
-# Verify queue processing, D1 inserts
+curl -X POST http://localhost:8787/ingest/all -H "Authorization: Bearer $TOKEN"
+# Verify queue processing, D1 inserts for all types
 ```
 
 **Phase 5: Production Deployment**
 ```bash
 wrangler deploy
 wrangler d1 migrations apply app_db  # Production
-# Call /ingest endpoints for all 6 types
-# Monitor queue processing
-# Verify D1 record counts
+# Call /ingest/all to process all 50K+ files
+curl -X POST https://api.example.com/ingest/all -H "Authorization: Bearer $TOKEN"
+# Monitor queue processing (~15-30 minutes)
+# Verify D1 record counts for all 6 types
 ```
 
 **Phase 6: Verification**
 ```bash
-# Check final counts
+# Check final counts for all types
 wrangler d1 execute app_db --command "SELECT COUNT(*) FROM chatter"
-# Expected: 8,006 (chatter), 2,607 (checkins), etc.
+# Expected: 8,006 (chatter), 2,607 (checkins), 2,659 (films),
+#           32 (quotes), 35,629 (shakespeare), 1,199 (topten)
 
 # Verify schema (no removed columns)
 wrangler d1 execute app_db --command "PRAGMA table_info(chatter)"
 
-# Test R2 fetch
+# Test R2 fetch for various types
 curl https://api.your-domain.com/chatter/{slug}
 ```
 

@@ -30,6 +30,35 @@
 		},
 	],
 
+	"secrets_store_secrets": [
+		{
+			"binding": "AUTH_TOKEN",
+			"store_id": "ab77e0b35ab549129fc55c15abf1dcd8",
+			"secret_name": "AUTH_TOKEN",
+		},
+		{
+			"binding": "CLOUDFLARE_MEDIA_TOKEN",
+			"store_id": "ab77e0b35ab549129fc55c15abf1dcd8",
+			"secret_name": "CLOUDFLARE_MEDIA_TOKEN",
+		},
+	],
+
+	"queues": {
+		"producers": [
+			{
+				"binding": "JSON_QUEUE",
+				"queue": "json-processing-queue",
+			},
+		],
+		"consumers": [
+			{
+				"queue": "json-processing-queue",
+				"max_batch_size": 100,
+				"max_batch_timeout": 30,
+			},
+		],
+	},
+
 	/**
 	 * Smart Placement
 	 * Docs: https://developers.cloudflare.com/workers/configuration/smart-placement/#smart-placement

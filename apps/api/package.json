@@ -10,15 +10,14 @@
 		"cf-typegen": "wrangler types"
 	},
 	"devDependencies": {
-		"@cloudflare/vitest-pool-workers": "^0.8.19",
+		"@cloudflare/vitest-pool-workers": "^0.10.3",
 		"@libsql/client": "^0.15.15",
-		"drizzle-kit": "^0.31.5",
+		"drizzle-kit": "^0.31.6",
 		"typescript": "^5.5.2",
 		"vitest": "~3.2.0",
-		"wrangler": "^4.45.0"
+		"wrangler": "^4.45.3"
 	},
 	"dependencies": {
-		"@noble/hashes": "^2.0.1",
 		"drizzle-orm": "^0.44.7",
 		"exifr": "^7.1.3"
 	}

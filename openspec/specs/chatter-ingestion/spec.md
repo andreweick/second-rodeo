@@ -1,7 +1,8 @@
-# Chatter Ingestion Capability
+# chatter-ingestion Specification
 
-## ADDED Requirements
-
+## Purpose
+TBD - created by archiving change add-bulk-d1-ingestion. Update Purpose after archive.
+## Requirements
 ### Requirement: Hot/Cold Storage Schema
 
 The system SHALL maintain chatter data using a hot/cold storage architecture where D1 stores minimal metadata for filtering and R2 stores complete content.
@@ -16,7 +17,7 @@ The system SHALL maintain chatter data using a hot/cold storage architecture whe
 
 - **WHEN** a chatter post is ingested
 - **THEN** R2 SHALL store complete wrapped JSON with type, id, and data containing all fields including title, date, content, tags, images
-- **AND** the R2 object key SHALL match the file path pattern `chatter/sha256_{hash}.json`
+- **AND** the R2 object key SHALL match the file path pattern `sha256_{hash}.json`
 
 #### Scenario: Title retrieval from R2
 
@@ -24,20 +25,27 @@ The system SHALL maintain chatter data using a hot/cold storage architecture whe
 - **THEN** the system MAY use slug for display
 - **OR** the system MAY fetch title from R2 JSON data object for richer display
 
-### Requirement: Bulk Chatter Ingestion Endpoint
+### Requirement: Chatter Ingestion Endpoints
 
-The system SHALL provide an authenticated HTTP endpoint to trigger bulk ingestion of all chatter files from R2.
+The system SHALL provide authenticated HTTP endpoints to trigger bulk or single-file ingestion of all content types from R2.
 
-#### Scenario: Successful bulk ingestion trigger
+#### Scenario: Successful bulk ingestion
 
-- **WHEN** an authenticated POST request is made to /chatter/ingest
-- **THEN** the system SHALL list all objects with R2 prefix `chatter/`
-- **AND** the system SHALL send one queue message per chatter file
-- **AND** the response SHALL return JSON with count of messages queued
+- **WHEN** an authenticated POST request is made to /ingest/all
+- **THEN** the system SHALL list all objects in SR_JSON bucket using pagination
+- **AND** the system SHALL use sendBatch() to queue up to 1000 messages per page
+- **AND** the system SHALL iterate through all pages until cursor is undefined
+- **AND** the response SHALL return JSON with total count of messages queued
+
+#### Scenario: Successful single-file ingestion
+
+- **WHEN** an authenticated POST request is made to /ingest/{objectKey}
+- **THEN** the system SHALL send a queue message for the specified objectKey
+- **AND** the response SHALL return JSON with queued: 1 and the objectKey
 
 #### Scenario: Authentication required
 
-- **WHEN** POST /chatter/ingest is called without valid AUTH_TOKEN
+- **WHEN** POST /ingest/* is called without valid AUTH_TOKEN
 - **THEN** the system SHALL return 401 Unauthorized status
 
 #### Scenario: R2 listing failure
@@ -46,16 +54,22 @@ The system SHALL provide an authenticated HTTP endpoint to trigger bulk ingestio
 - **THEN** the system SHALL return 500 status with error message
 - **AND** no queue messages SHALL be sent
 
+#### Scenario: Pagination handling
+
+- **WHEN** R2 bucket contains more than 1000 objects
+- **THEN** the system SHALL use cursor-based pagination
+- **AND** the system SHALL process all pages within Worker timeout limits (< 30 seconds)
+
 ### Requirement: Chatter Queue Processing
 
-The system SHALL process chatter queue messages by validating wrapped JSON structure and inserting minimal metadata to D1.
+The system SHALL process queue messages by validating wrapped JSON structure, routing by type field, and inserting minimal metadata to D1.
 
 #### Scenario: Valid chatter ingestion from wrapped JSON
 
-- **WHEN** a queue message with objectKey `chatter/sha256_{hash}.json` is received
+- **WHEN** a queue message with objectKey `sha256_{hash}.json` is received
 - **THEN** the system SHALL fetch wrapped JSON from R2
 - **AND** unwrap to extract type, id, and data fields
-- **AND** validate type equals "chatter"
+- **AND** route to chatter validator when type equals "chatter"
 - **AND** validate required fields in data: date_posted, year, month, slug
 - **AND** validate optional display fields exist in data: title, date
 - **AND** insert record to chatter table with only: id (from envelope), datePosted, year, month, slug, publish, r2Key
@@ -81,8 +95,8 @@ The system SHALL support idempotent re-ingestion of chatter data without causing
 
 #### Scenario: Re-running full ingestion
 
-- **WHEN** /chatter/ingest is called multiple times
-- **THEN** each call SHALL queue all chatter messages again
+- **WHEN** /ingest/all is called multiple times
+- **THEN** each call SHALL queue all messages again (including all content types)
 - **AND** queue processing SHALL handle duplicate slugs gracefully via UNIQUE constraint
 - **AND** final D1 state SHALL contain exactly one record per unique chatter slug
 
@@ -99,8 +113,9 @@ The system SHALL use consistent R2 object key formats for chatter data to enable
 #### Scenario: Chatter file naming
 
 - **WHEN** storing or retrieving chatter JSON
-- **THEN** R2 key format SHALL be `chatter/sha256_{hash}.json`
+- **THEN** R2 key format SHALL be `sha256_{hash}.json` (content-addressable at bucket root)
 - **AND** {hash} SHALL match the id field in the envelope (without `sha256:` prefix)
+- **AND** content type SHALL be determined by envelope `type` field, not object key path
 
 ### Requirement: Query Performance Optimization
 
@@ -129,3 +144,4 @@ The system SHALL structure D1 schema to enable fast filtering queries on chatter
 - **WHEN** sorting chatter posts chronologically
 - **THEN** query SHALL use datePosted field for efficient ordering
 - **AND** derive YYYY-MM-DD format from datePosted when needed
+

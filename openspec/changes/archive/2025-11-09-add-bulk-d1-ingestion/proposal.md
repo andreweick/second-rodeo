@@ -8,13 +8,16 @@ This consolidates six separate phase1-*-ingest proposals into a unified implemen
 
 ## What Changes
 
-- Add HTTP endpoints `POST /{type}/ingest` for six content types
+- Add simplified HTTP ingestion API: `POST /ingest/all` for bulk ingestion and `POST /ingest/{objectKey}` for single-file ingestion
+- Use pagination with `sendBatch()` to handle 100K+ files within Worker timeout limits
 - Update validators to handle wrapped JSON format (`{type, id, data}`)
 - Extract required fields from `data` object per content type
+- Consumer routes messages by type field (no pre-filtering in producer)
 - **BREAKING**: Update D1 table schemas to remove redundant fields (per type-specific requirements)
 - Generate Drizzle migrations for schema changes
 - Support idempotent re-ingestion via UNIQUE constraints on slug/id fields
 - Preserve exact field mappings from existing phase1-*-ingest validators
+- Keep `/upload` endpoint focused on R2 storage only (no auto-queuing)
 
 ## Impact
 
@@ -46,16 +49,24 @@ This consolidates six separate phase1-*-ingest proposals into a unified implemen
 **User workflow:**
 1. Files uploaded to R2 via `/upload` endpoint (wrapped format)
 2. Apply schema migrations: `just migrate-local` then production
-3. Call `POST /{type}/ingest` endpoints (authenticated)
-4. Endpoints list R2 objects and queue messages
-5. Queue processes files, validates, inserts to D1
-6. Query D1 for filtering, fetch R2 for full content
+3. Trigger ingestion:
+   - **Bulk:** `POST /ingest/all` lists all R2 objects with pagination, queues all (50K+ files supported)
+   - **Single:** `POST /ingest/{objectKey}` queues specific file for processing
+4. Queue processes files, consumer routes by type field, validates, inserts to D1
+5. Query D1 for filtering, fetch R2 for full content
+
+**Ingestion patterns:**
+- Initial bulk ingestion: `POST /ingest/all` (processes all 50K+ files, ~7-15 seconds)
+- Re-process single file: `POST /ingest/sha256_abc123.json`
+- Upload stays storage-only: `/upload` does not auto-queue
+- Consumer handles all 6 types, routing via type field validation
 
 **Breaking changes:**
 - **BREAKING**: All 6 table schemas simplified (fields removed from D1)
 - Wrapped JSON format required in R2 (migration handled separately)
 - Validators expect `{type, id, data}` structure
 - Query patterns shift from D1 fields to R2 fetches for removed fields
+- Simplified API: single bulk endpoint instead of per-type endpoints
 
 **Note on file migration:**
 - Existing flat JSON files in R2 will be wrapped via separate manual migration

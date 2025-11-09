@@ -1,7 +1,8 @@
-# Top Ten Lists Ingestion
+# topten-ingestion Specification
 
-## ADDED Requirements
-
+## Purpose
+TBD - created by archiving change add-bulk-d1-ingestion. Update Purpose after archive.
+## Requirements
 ### Requirement: Hot/Cold Storage Architecture
 
 The system SHALL maintain top ten list data using a hot/cold storage architecture where D1 stores minimal metadata for filtering and R2 stores complete content.
@@ -42,21 +43,27 @@ The system SHALL maintain top ten list data using a hot/cold storage architectur
 - **THEN** the system SHALL use SQLite date function: `WHERE strftime('%Y-%m', date) = '1990-05'`
 - **AND** NOT require a separate month column
 
-### Requirement: Bulk Ingestion Endpoint
+### Requirement: Top Ten List Ingestion Endpoints
 
-The system SHALL provide an authenticated HTTP endpoint to trigger bulk ingestion of all top ten list files from R2.
+The system SHALL provide authenticated HTTP endpoints to trigger bulk or single-file ingestion of all content types from R2.
 
-#### Scenario: Authenticated bulk ingestion
+#### Scenario: Successful bulk ingestion
 
-- **WHEN** an authenticated POST request is made to /topten/ingest
-- **THEN** the system SHALL list all objects with R2 prefix `topten/`
-- **AND** filter for .json files only
-- **AND** send one queue message per file
-- **AND** return JSON with count of messages queued
+- **WHEN** an authenticated POST request is made to /ingest/all
+- **THEN** the system SHALL list all objects in SR_JSON bucket using pagination
+- **AND** the system SHALL use sendBatch() to queue up to 1000 messages per page
+- **AND** the system SHALL iterate through all pages until cursor is undefined
+- **AND** the response SHALL return JSON with total count of messages queued
+
+#### Scenario: Successful single-file ingestion
+
+- **WHEN** an authenticated POST request is made to /ingest/{objectKey}
+- **THEN** the system SHALL send a queue message for the specified objectKey
+- **AND** the response SHALL return JSON with queued: 1 and the objectKey
 
 #### Scenario: Authentication required
 
-- **WHEN** POST /topten/ingest is called without valid AUTH_TOKEN
+- **WHEN** POST /ingest/* is called without valid AUTH_TOKEN
 - **THEN** the system SHALL return 401 Unauthorized status
 
 #### Scenario: R2 listing error handling
@@ -65,16 +72,22 @@ The system SHALL provide an authenticated HTTP endpoint to trigger bulk ingestio
 - **THEN** the system SHALL return 500 status with error message
 - **AND** no queue messages SHALL be sent
 
+#### Scenario: Pagination handling
+
+- **WHEN** R2 bucket contains more than 1000 objects
+- **THEN** the system SHALL use cursor-based pagination
+- **AND** the system SHALL process all pages within Worker timeout limits (< 30 seconds)
+
 ### Requirement: Queue Message Processing
 
-The system SHALL process top ten list queue messages by validating wrapped JSON structure and inserting minimal metadata to D1.
+The system SHALL process queue messages by validating wrapped JSON structure, routing by type field, and inserting minimal metadata to D1.
 
 #### Scenario: Successful ingestion from wrapped JSON
 
-- **WHEN** a queue message with objectKey `topten/sha256_{hash}.json` is received
+- **WHEN** a queue message with objectKey `sha256_{hash}.json` is received
 - **THEN** the system SHALL fetch wrapped JSON from R2
 - **AND** unwrap to extract type, id, and data fields
-- **AND** validate type equals "topten"
+- **AND** route to topten validator when type equals "topten"
 - **AND** validate required fields in data: show, date, title
 - **AND** insert record to topten table with: id (from envelope), show, date, title, r2Key set to objectKey
 - **AND** mark message as successfully processed
@@ -106,8 +119,8 @@ The system SHALL support idempotent re-ingestion of top ten lists without causin
 
 #### Scenario: Safe re-ingestion
 
-- **WHEN** /topten/ingest is called multiple times
-- **THEN** each call SHALL queue all messages again
+- **WHEN** /ingest/all is called multiple times
+- **THEN** each call SHALL queue all messages again (including all content types)
 - **AND** queue processing SHALL handle duplicate ids gracefully via UNIQUE constraint
 - **AND** final D1 state SHALL contain exactly 1,199 list records
 
@@ -124,8 +137,9 @@ The system SHALL use consistent R2 object key formats for top ten list data to e
 #### Scenario: Flat file structure
 
 - **WHEN** storing or retrieving list JSON
-- **THEN** R2 key format SHALL be `topten/sha256_{hash}.json`
+- **THEN** R2 key format SHALL be `sha256_{hash}.json` (content-addressable at bucket root)
 - **AND** {hash} SHALL match the id field in the envelope (without `sha256:` prefix)
+- **AND** content type SHALL be determined by envelope `type` field, not object key path
 
 #### Scenario: Direct path computation
 
@@ -185,3 +199,4 @@ The system SHALL validate top ten list JSON structure before inserting to D1 to 
 - **WHEN** validating list JSON data object
 - **THEN** items, sourceUrl, and dataQuality SHALL be optional
 - **AND** missing optional fields SHALL NOT cause validation failure
+
