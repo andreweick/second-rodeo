@@ -1,14 +1,14 @@
 set fallback
 
-# Start the API worker
+# Start the API worker only (dev server on port 8787, no static blog assets)
 api:
     pnpm --filter api dev
 
-# Start the web app
+# Start the web app only (separate dev server)
 web:
     pnpm --filter apps-web dev
 
-# Start the paper blog
+# Start the paper blog only (Astro dev server with hot reload)
 paper:
     pnpm --filter astro-paper dev
 
@@ -69,11 +69,23 @@ test-watch:
 ts-check:
     cd apps/api && npx tsc --noEmit && npx tsc --noEmit -p test/tsconfig.json
 
-# Run all apps in parallel
+# Run API and paper in parallel (separate dev servers for fast iteration)
 dev-all:
-    pnpm --parallel --filter api --filter apps-web --filter astro-paper dev
+    pnpm --parallel --filter api --filter astro-paper dev
 
-deploy-api:
+# Build the paper blog to static files (outputs to apps/paper/dist/)
+build-paper:
+    pnpm --filter astro-paper run build
+
+# Build the entire app (paper + API) for local testing or deployment
+build: build-paper
+
+# Run full app locally via wrangler (builds paper, serves via ASSETS binding like production)
+dev-local: build-paper
+    pnpm --filter api dev
+
+# Deploy API with blog assets to Cloudflare Workers
+deploy-api: build-paper
     pnpm --filter api run deploy
 
 # Sync AUTH_TOKEN from .dev.vars to production
