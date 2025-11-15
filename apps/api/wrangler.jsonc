@@ -29,7 +29,16 @@
 			"bucket_name": "sr-artifact",
 		},
 	],
-
+	"routes": [
+		{
+			"pattern": "eick.com",
+			"custom_domain": true,
+		},
+		{
+			"pattern": "www.eick.com",
+			"custom_domain": true,
+		},
+	],
 	"secrets_store_secrets": [
 		{
 			"binding": "AUTH_TOKEN",
@@ -40,6 +49,11 @@
 			"binding": "CLOUDFLARE_MEDIA_TOKEN",
 			"store_id": "ab77e0b35ab549129fc55c15abf1dcd8",
 			"secret_name": "CLOUDFLARE_MEDIA_TOKEN",
+		},
+		{
+			"binding": "GOOGLE_PLACES_API",
+			"store_id": "ab77e0b35ab549129fc55c15abf1dcd8",
+			"secret_name": "GOOGLE_PLACES_API",
 		},
 	],
 
@@ -85,7 +99,7 @@
 	 * Static Assets
 	 * https://developers.cloudflare.com/workers/static-assets/binding/
 	 */
-	"assets": { "directory": "../paper/dist/", "binding": "ASSETS" }
+	"assets": { "directory": "../paper/dist/", "binding": "ASSETS" },
 	/**
 	 * Service Bindings (communicate between multiple Workers)
 	 * https://developers.cloudflare.com/workers/wrangler/configuration/#service-bindings
