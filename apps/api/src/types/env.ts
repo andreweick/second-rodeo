@@ -35,4 +35,9 @@ export interface Env {
 	CLOUDFLARE_MEDIA_TOKEN: {
 		get(): Promise<string>;
 	};
+
+	/**
+	 * Static assets from the Astro blog
+	 */
+	ASSETS: Fetcher;
 }

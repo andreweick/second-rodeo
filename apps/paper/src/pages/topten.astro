@@ -1,0 +1,143 @@
+---
+import Layout from "@/layouts/Layout.astro";
+import Header from "@/components/Header.astro";
+import Footer from "@/components/Footer.astro";
+import { SITE } from "@/config";
+---
+
+<Layout>
+  <Header />
+  <main id="main-content">
+    <section class="pt-8 pb-6">
+      <div id="loading" class="text-lg">
+        Loading random top ten list...
+      </div>
+
+      <div id="error" class="hidden text-red-600">
+        Failed to load top ten list. Please try again later.
+      </div>
+
+      <div id="topten-content" class="hidden">
+        <div class="mb-4">
+          <p id="show-date" class="text-xs text-gray-500 mb-2"></p>
+          <h2 id="list-title" class="text-xl font-semibold"></h2>
+        </div>
+
+        <ul id="topten-list" class="space-y-1">
+          <!-- Items will be inserted here by JavaScript -->
+        </ul>
+
+        <style>
+          #topten-list li {
+            display: flex;
+            align-items: flex-start;
+          }
+          #topten-list .number {
+            min-width: 2rem;
+            text-align: right;
+            margin-right: 0.5rem;
+            flex-shrink: 0;
+          }
+          #topten-list .text {
+            flex: 1;
+          }
+        </style>
+
+        <div class="mt-8">
+          <button
+            id="refresh-btn"
+            class="px-4 py-2 bg-accent text-white rounded hover:bg-accent-dark transition-colors"
+          >
+            Load Another List
+          </button>
+        </div>
+      </div>
+    </section>
+  </main>
+  <Footer />
+</Layout>
+
+<script is:inline define:vars={{ apiUrl: SITE.website }}>
+  async function loadTopTen() {
+    const loading = document.getElementById('loading');
+    const error = document.getElementById('error');
+    const content = document.getElementById('topten-content');
+    const showDate = document.getElementById('show-date');
+    const listTitle = document.getElementById('list-title');
+    const list = document.getElementById('topten-list');
+
+    // Show loading state
+    if (loading) loading.classList.remove('hidden');
+    if (error) error.classList.add('hidden');
+    if (content) content.classList.add('hidden');
+
+    try {
+      const response = await fetch(`${apiUrl}api/topten/random`);
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const responseData = await response.json();
+
+      // Data is nested under 'data' property
+      const data = responseData.data;
+
+      // Hide loading, show content
+      if (loading) loading.classList.add('hidden');
+      if (content) content.classList.remove('hidden');
+
+      // Populate the page with data
+      if (showDate) showDate.textContent = data.date || '';
+      if (listTitle) listTitle.textContent = data.title || '';
+
+      // Clear and populate the list
+      if (list) {
+        list.innerHTML = '';
+
+        if (data.items && Array.isArray(data.items)) {
+          data.items.forEach((item) => {
+            // Split the number from the text (e.g., "10. Text" -> ["10", "Text"])
+            const match = item.match(/^(\d+)\.\s*(.*)$/);
+
+            const li = document.createElement('li');
+            li.className = 'text-base';
+
+            if (match) {
+              const numberSpan = document.createElement('span');
+              numberSpan.className = 'number';
+              numberSpan.textContent = match[1] + '.';
+
+              const textSpan = document.createElement('span');
+              textSpan.className = 'text';
+              textSpan.textContent = match[2];
+
+              li.appendChild(numberSpan);
+              li.appendChild(textSpan);
+            } else {
+              // Fallback if format doesn't match
+              li.textContent = item;
+            }
+
+            list.appendChild(li);
+          });
+        }
+      }
+    } catch (err) {
+      console.error('Error loading top ten:', err);
+      if (loading) loading.classList.add('hidden');
+      if (error) error.classList.remove('hidden');
+    }
+  }
+
+  // Load on page load
+  document.addEventListener('astro:page-load', () => {
+    loadTopTen();
+
+    // Add click handler for refresh button
+    const refreshBtn = document.getElementById('refresh-btn');
+    if (refreshBtn) {
+      refreshBtn.addEventListener('click', loadTopTen);
+    }
+  });
+</script>

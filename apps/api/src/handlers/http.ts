@@ -1,6 +1,8 @@
 import type { Env } from '../types/env';
 import { uploadImage, ImageUploadError } from '../services/image-upload';
 import { uploadJSON, JsonUploadError } from '../services/json-upload';
+import { connectD1, schema } from '../db/client';
+import { sql } from 'drizzle-orm';
 
 /**
  * Validates authentication token from request headers
@@ -23,10 +25,76 @@ async function validateAuth(request: Request, env: Env): Promise<boolean> {
 export async function handleHttp(request: Request, env: Env): Promise<Response> {
 	const url = new URL(request.url);
 
+	// Handle API routes first
 	if (url.pathname === '/health') {
 		return new Response(JSON.stringify({ ok: true, ts: Date.now() }), {
 			headers: { 'content-type': 'application/json; charset=utf-8' },
 		});
+	}
+
+	if (url.pathname === '/api/topten/random' && request.method === 'GET') {
+		try {
+			// Connect to D1 database
+			const db = connectD1(env.DB);
+
+			// Query for a random topten record
+			const result = await db
+				.select()
+				.from(schema.topten)
+				.orderBy(sql`RANDOM()`)
+				.limit(1);
+
+			if (result.length === 0) {
+				return new Response(JSON.stringify({ error: 'No topten lists found' }), {
+					status: 404,
+					headers: {
+						'content-type': 'application/json; charset=utf-8',
+						'access-control-allow-origin': '*',
+					},
+				});
+			}
+
+			const toptenRecord = result[0];
+
+			// Fetch full JSON from R2
+			const r2Object = await env.SR_JSON.get(toptenRecord.r2Key);
+
+			if (!r2Object) {
+				return new Response(JSON.stringify({ error: 'TopTen data not found in storage' }), {
+					status: 404,
+					headers: {
+						'content-type': 'application/json; charset=utf-8',
+						'access-control-allow-origin': '*',
+					},
+				});
+			}
+
+			const fullData = await r2Object.json();
+
+			// Return combined metadata and full data
+			return new Response(JSON.stringify(fullData), {
+				status: 200,
+				headers: {
+					'content-type': 'application/json; charset=utf-8',
+					'access-control-allow-origin': '*',
+				},
+			});
+		} catch (error) {
+			console.error('TopTen random fetch error:', error);
+			return new Response(
+				JSON.stringify({
+					error: 'Failed to fetch random topten',
+					details: error instanceof Error ? error.message : String(error),
+				}),
+				{
+					status: 500,
+					headers: {
+						'content-type': 'application/json; charset=utf-8',
+						'access-control-allow-origin': '*',
+					},
+				}
+			);
+		}
 	}
 
 	if (url.pathname === '/images' && request.method === 'POST') {
@@ -210,5 +278,7 @@ export async function handleHttp(request: Request, env: Env): Promise<Response> 
 		}
 	}
 
-	return new Response('ok');
+	// All other routes: serve static assets from the blog
+	// The ASSETS binding automatically handles 404s and proper content types
+	return env.ASSETS.fetch(request);
 }
