@@ -7,7 +7,7 @@ The system SHALL index photo metadata to D1 database asynchronously via Cloudfla
 
 #### Scenario: Queue message sent after R2 writes
 - **WHEN** blob and JSON are successfully written to R2
-- **THEN** a queue message is sent with `{type: 'photo', sid, r2Key}` payload
+- **THEN** a queue message is sent with `{type: 'photo', id, r2Key}` payload
 
 #### Scenario: Client receives fast response
 - **WHEN** R2 writes and queue message complete
@@ -19,7 +19,7 @@ The system SHALL index photo metadata to D1 database asynchronously via Cloudfla
 
 #### Scenario: Idempotent upserts
 - **WHEN** the same queue message is processed multiple times (retry)
-- **THEN** D1 record is upserted with `ON CONFLICT(sid) DO UPDATE`, preventing duplicates
+- **THEN** D1 record is upserted with `ON CONFLICT(id) DO UPDATE`, preventing duplicates
 
 #### Scenario: Failed indexing retries
 - **WHEN** D1 upsert fails (e.g., database busy)
@@ -34,7 +34,7 @@ The system SHALL store only queryable fields in D1 photos table using Drizzle OR
 
 #### Scenario: Main table queryable fields
 - **WHEN** photo is indexed to D1 `photos` table
-- **THEN** fields include: sid, sha256, blake3, takenAt, uploadedAt, cameraMake, cameraModel, lensModel, gpsLat, gpsLon, width, height, mimeType, fileSize, r2Key, source, createdAt, updatedAt
+- **THEN** fields include: id (sha256:...), sha256, takenAt, uploadedAt, cameraMake, cameraModel, lensModel, gpsLat, gpsLon, width, height, mimeType, fileSize, r2Key, source, createdAt, updatedAt
 
 #### Scenario: EXIF fields excluded from D1
 - **WHEN** photo has 200+ EXIF fields
@@ -101,7 +101,7 @@ The system SHALL provide a HEAD endpoint to check if an image already exists by 
 
 #### Scenario: Image already exists
 - **WHEN** client sends `HEAD /api/photos/check/:sha256` for existing image
-- **THEN** system queries D1 photos table and returns 200 OK with `X-Stable-ID` header containing the SID
+- **THEN** system queries D1 photos table and returns 200 OK with `X-Photo-ID` header containing the content-addressed ID
 
 #### Scenario: Image does not exist
 - **WHEN** client sends `HEAD /api/photos/check/:sha256` for new image
@@ -117,14 +117,14 @@ The system SHALL provide a HEAD endpoint to check if an image already exists by 
 
 #### Scenario: Eventual consistency edge case
 - **WHEN** photo was just uploaded but not yet indexed to D1
-- **THEN** deduplication endpoint may return 404 (acceptable - client uploads again, dedup happens server-side via SID)
+- **THEN** deduplication endpoint may return 404 (acceptable - client uploads again, dedup happens server-side via SHA256)
 
 ### Requirement: Deduplication by Content Hash
 The system SHALL prevent duplicate uploads by detecting existing images via SHA256 lookup before writing to R2.
 
 #### Scenario: Duplicate detected by SHA256
 - **WHEN** uploaded image SHA256 matches existing photo in D1
-- **THEN** system returns 200 OK with existing SID and message "Image already exists"
+- **THEN** system returns 200 OK with existing ID and message "Image already exists"
 
 #### Scenario: New image uploaded
 - **WHEN** uploaded image SHA256 does not exist in D1
@@ -140,4 +140,4 @@ The system SHALL prevent duplicate uploads by detecting existing images via SHA2
 
 #### Scenario: Server-side deduplication fallback
 - **WHEN** client skips HEAD check and uploads duplicate
-- **THEN** server detects duplicate during upload (D1 query) and returns existing SID
+- **THEN** server detects duplicate during upload (D1 query) and returns existing ID

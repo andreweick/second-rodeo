@@ -48,8 +48,8 @@ This phase extends Phase 1 without breaking changes. The deduplication endpoint 
 
 ### Future Phases
 This proposal is part 2 of 4:
-- **Phase 1** (complete): Upload core with hashing, SID, R2 storage
-- **Phase 2** (this): D1 async indexing for queries
+- **Phase 1** (complete): Upload core with SHA256 hashing, content-addressed IDs, R2 storage
+- **Phase 2** (this): D1 async indexing for queries and deduplication
 - **Phase 3**: Full-text search with FTS5
 - **Phase 4**: OpenAPI documentation
 

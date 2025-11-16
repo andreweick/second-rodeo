@@ -3,11 +3,11 @@
 ## ADDED Requirements
 
 ### Requirement: Image Upload with Authentication
-The system SHALL accept authenticated image uploads via POST endpoint and return upload confirmation with stable asset ID.
+The system SHALL accept authenticated image uploads via POST endpoint and return upload confirmation with content-addressed ID.
 
 #### Scenario: Successful authenticated upload
 - **WHEN** a client sends a POST request to `/images` with valid Bearer token and image file
-- **THEN** the system returns 201 Created with `sid`, `sha256`, `blake3`, and upload metadata
+- **THEN** the system returns 201 Created with `id` (format: "sha256:..."), `sha256`, and upload metadata
 
 #### Scenario: Missing authentication
 - **WHEN** a client sends a POST request without Authorization header
@@ -25,46 +25,42 @@ The system SHALL accept authenticated image uploads via POST endpoint and return
 - **WHEN** a client sends a POST request without a file in form data
 - **THEN** the system returns 400 Bad Request
 
-### Requirement: Dual Content Hashing
-The system SHALL compute both SHA256 and BLAKE3 hashes for every uploaded image to enable deduplication and future-proof integrity verification.
+### Requirement: SHA256 Content Hashing
+The system SHALL compute SHA256 hash for every uploaded image to enable deduplication and integrity verification.
 
-#### Scenario: Server computes both hashes
-- **WHEN** an image is uploaded without client-provided hashes
-- **THEN** the system computes both SHA256 and BLAKE3 hashes from the file buffer
+#### Scenario: Server computes SHA256 hash
+- **WHEN** an image is uploaded without client-provided hash
+- **THEN** the system computes SHA256 hash from the file buffer using Web Crypto API
 
-#### Scenario: Hashes stored in all locations
-- **WHEN** hashes are computed
-- **THEN** both hashes are stored in R2 blob custom headers, metadata JSON, and D1 table
+#### Scenario: Hash stored in all locations
+- **WHEN** hash is computed
+- **THEN** SHA256 hash is stored in R2 blob custom headers, metadata JSON, and D1 table
 
 #### Scenario: SHA256 used for deduplication
 - **WHEN** checking if image already exists
-- **THEN** the system uses SHA256 hash for lookup (wider compatibility)
+- **THEN** the system uses SHA256 hash for lookup
 
 ### Requirement: Client Hash Optimization
-The system SHALL accept optional client-computed hashes via HTTP headers and validate them server-side to enable pre-upload deduplication and reduce Worker CPU usage.
+The system SHALL accept optional client-computed SHA256 hash via HTTP header and validate it server-side to enable pre-upload deduplication and reduce Worker CPU usage.
 
 #### Scenario: Client provides valid SHA256
 - **WHEN** client sends `X-Client-SHA256` header with correct hash
 - **THEN** server computes SHA256, validates match, and uses validated hash
 
-#### Scenario: Client provides valid BLAKE3
-- **WHEN** client sends `X-Client-BLAKE3` header with correct hash
-- **THEN** server computes BLAKE3, validates match, and uses validated hash
-
 #### Scenario: Client hash mismatch detected
 - **WHEN** client-provided hash does not match server computation
 - **THEN** system returns 400 Bad Request with "Hash mismatch - possible corruption" error
 
-#### Scenario: Missing client hashes
-- **WHEN** client does not provide hash headers
-- **THEN** server computes hashes without validation and proceeds normally
+#### Scenario: Missing client hash
+- **WHEN** client does not provide hash header
+- **THEN** server computes SHA256 without validation and proceeds normally
 
 ### Requirement: Pre-Upload Deduplication
 The system SHALL provide a HEAD endpoint to check if an image already exists by SHA256 hash, enabling clients to skip redundant uploads.
 
 #### Scenario: Image already exists
 - **WHEN** client sends `HEAD /api/photos/check/:sha256` for existing image
-- **THEN** system returns 200 OK with `X-Stable-ID` header containing the SID
+- **THEN** system returns 200 OK with `X-Photo-ID` header containing the ID
 
 #### Scenario: Image does not exist
 - **WHEN** client sends `HEAD /api/photos/check/:sha256` for new image
@@ -78,24 +74,24 @@ The system SHALL provide a HEAD endpoint to check if an image already exists by 
 - **WHEN** client computes SHA256 locally and calls check endpoint before upload
 - **THEN** client can skip 4MB upload if hash matches existing image, saving bandwidth
 
-### Requirement: Stable Asset ID Generation
-The system SHALL generate deterministic stable IDs (SID) based on content hash and EXIF metadata using UUIDv5 namespace hashing.
+### Requirement: Content-Addressed Storage
+The system SHALL use SHA256 hash directly as the image identifier, enabling deterministic deduplication and content-addressed storage.
 
-#### Scenario: SID from complete EXIF data
-- **WHEN** image has SHA256, DateTimeOriginal, Make, and Model in EXIF
-- **THEN** SID is computed as `uuidv5(namespace, sha256 + dateTimeOriginal + make + model)`
+#### Scenario: ID from content hash
+- **WHEN** an image is uploaded
+- **THEN** ID is generated as `sha256:{hash}` where {hash} is the hex-encoded SHA256
 
-#### Scenario: SID with missing EXIF fields
-- **WHEN** image lacks DateTimeOriginal, Make, or Model
-- **THEN** missing fields are replaced with fallbacks (uploadDate, "unknown", "unknown") and SID is still deterministic
+#### Scenario: Deterministic deduplication
+- **WHEN** the same image file is uploaded multiple times
+- **THEN** the same ID is generated each time (same bytes = same ID)
 
-#### Scenario: Deterministic SID generation
-- **WHEN** the same image is uploaded multiple times
-- **THEN** the same SID is generated each time (deduplication)
+#### Scenario: R2 key from ID
+- **WHEN** storing files in R2
+- **THEN** artifact key is `photos/sha256_{hash}.jpg` and metadata key is `photos/sha256_{hash}.json`
 
-#### Scenario: SID uniqueness
+#### Scenario: ID uniqueness
 - **WHEN** two different images are uploaded
-- **THEN** they receive different SIDs (collision probability negligible with UUIDv5 + SHA256)
+- **THEN** they receive different IDs (SHA256 collision probability is negligible)
 
 ### Requirement: EXIF Metadata Extraction
 The system SHALL extract comprehensive metadata from uploaded images including camera settings, GPS coordinates, timestamps, and IPTC text fields using the exifr library.
@@ -124,31 +120,28 @@ The system SHALL extract comprehensive metadata from uploaded images including c
 The system SHALL store image blobs and metadata JSON in separate R2 buckets with identical key structures for separation of concerns.
 
 #### Scenario: Blob stored in sr-artifact
-- **WHEN** an image is uploaded with SID `sid_abc123` and MIME type `image/jpeg`
-- **THEN** blob is written to `sr-artifact/photos/sid_abc123.jpg`
+- **WHEN** an image is uploaded with ID `sha256:abc123...` and MIME type `image/jpeg`
+- **THEN** blob is written to `sr-artifact/photos/sha256_abc123.jpg`
 
 #### Scenario: Metadata JSON stored in sr-json
-- **WHEN** an image is uploaded with SID `sid_abc123`
-- **THEN** complete metadata JSON is written to `sr-json/photos/sid_abc123.json`
+- **WHEN** an image is uploaded with ID `sha256:abc123...`
+- **THEN** complete metadata JSON is written to `sr-json/photos/sha256_abc123.json`
 
 #### Scenario: File extension matches MIME type
 - **WHEN** MIME type is `image/jpeg`, `image/png`, `image/gif`, or `image/webp`
 - **THEN** file extension is `.jpg`, `.png`, `.gif`, or `.webp` respectively
 
 #### Scenario: Parallel key structure
-- **WHEN** blob key is `photos/sid_abc123.jpg`
-- **THEN** metadata key is `photos/sid_abc123.json` (same path structure, different bucket)
+- **WHEN** blob key is `photos/sha256_abc123.jpg`
+- **THEN** metadata key is `photos/sha256_abc123.json` (same path structure, different bucket)
 
 ### Requirement: R2 Custom Metadata Headers
 The system SHALL store key metadata in custom HTTP headers (x-amz-*) on blob objects for fast access without fetching the full file.
 
-#### Scenario: Content hashes in headers
+#### Scenario: Content hash in headers
 - **WHEN** blob is written to sr-artifact
-- **THEN** headers include `x-amz-sha256` and `x-amz-blake3` with hex-encoded hashes
+- **THEN** header includes `x-amz-sha256` with hex-encoded hash
 
-#### Scenario: Stable ID in headers
-- **WHEN** blob is written to sr-artifact
-- **THEN** header `x-amz-stable-id` contains the SID
 
 #### Scenario: Upload timestamp in headers
 - **WHEN** blob is written to sr-artifact
@@ -171,7 +164,7 @@ The system SHALL write complete, uncompressed JSON files to sr-json containing f
 
 #### Scenario: Complete JSON structure
 - **WHEN** metadata JSON is written
-- **THEN** it contains fields: `sid`, `sha256`, `blake3`, `file` (size, mime, dimensions), `exif`, `iptc`, `uploadedAt`, `source`
+- **THEN** it contains fields: `id`, `sha256`, `file` (size, mime, dimensions), `exif`, `iptc`, `uploadedAt`, `source`
 
 #### Scenario: Nested file metadata
 - **WHEN** JSON `file` object is written
@@ -198,7 +191,7 @@ The system SHALL index photo metadata to D1 database asynchronously via Cloudfla
 
 #### Scenario: Queue message sent after R2 writes
 - **WHEN** blob and JSON are successfully written to R2
-- **THEN** a queue message is sent with `{sid, r2Key}` payload
+- **THEN** a queue message is sent with `{id, r2Key}` payload
 
 #### Scenario: Client receives fast response
 - **WHEN** R2 writes and queue message complete
@@ -210,7 +203,7 @@ The system SHALL index photo metadata to D1 database asynchronously via Cloudfla
 
 #### Scenario: Idempotent upserts
 - **WHEN** the same queue message is processed multiple times (retry)
-- **THEN** D1 record is upserted with `ON CONFLICT(sid) DO UPDATE`, preventing duplicates
+- **THEN** D1 record is upserted with `ON CONFLICT(id) DO UPDATE`, preventing duplicates
 
 #### Scenario: Failed indexing retries
 - **WHEN** D1 upsert fails (e.g., database busy)
@@ -221,7 +214,7 @@ The system SHALL store only queryable fields in D1 main table using Drizzle ORM,
 
 #### Scenario: Main table queryable fields
 - **WHEN** photo is indexed to D1 `photos` table
-- **THEN** fields include: sid, sha256, blake3, takenAt, uploadedAt, cameraMake, cameraModel, gpsLat, gpsLon, width, height, mimeType, fileSize, hasC2pa, r2Key, source
+- **THEN** fields include: id, sha256, takenAt, uploadedAt, cameraMake, cameraModel, gpsLat, gpsLon, width, height, mimeType, fileSize, hasC2pa, r2Key, source
 
 #### Scenario: EXIF fields excluded from D1
 - **WHEN** photo has 200+ EXIF fields
@@ -250,13 +243,13 @@ The system SHALL provide full-text search on photo captions, titles, keywords, a
 - **WHEN** FTS5 table is populated
 - **THEN** it includes fields: title, caption, keywords (space-separated), creator, city, country, camera_make, camera_model
 
-#### Scenario: SID as join key only
+#### Scenario: ID as join key only
 - **WHEN** FTS5 table is created
-- **THEN** `sid` field is marked UNINDEXED (used only for joining, not searching)
+- **THEN** `id` field is marked UNINDEXED (used only for joining, not searching)
 
 #### Scenario: Text search query
 - **WHEN** user searches for "sunset beach"
-- **THEN** query is `SELECT p.* FROM photos p JOIN photos_fts fts ON p.sid = fts.sid WHERE photos_fts MATCH 'sunset beach' ORDER BY rank`
+- **THEN** query is `SELECT p.* FROM photos p JOIN photos_fts fts ON p.id = fts.id WHERE photos_fts MATCH 'sunset beach' ORDER BY rank`
 
 #### Scenario: FTS5 ranking
 - **WHEN** search matches multiple photos
@@ -271,7 +264,7 @@ The system SHALL prevent duplicate uploads by detecting existing images via SHA2
 
 #### Scenario: Duplicate detected by SHA256
 - **WHEN** uploaded image SHA256 matches existing photo in D1
-- **THEN** system returns 200 OK with existing SID and message "Image already exists"
+- **THEN** system returns 200 OK with existing ID and message "Image already exists"
 
 #### Scenario: New image uploaded
 - **WHEN** uploaded image SHA256 does not exist in D1
@@ -325,7 +318,7 @@ The system SHALL validate all inputs and provide clear error messages for debugg
 
 #### Scenario: Detailed error logging
 - **WHEN** any error occurs
-- **THEN** system logs error with context: sid, sha256, operation, timestamp
+- **THEN** system logs error with context: id, sha256, operation, timestamp
 
 ### Requirement: Future C2PA Extension
 The system SHALL support future addition of C2PA content authenticity data without breaking changes to schema or API.
@@ -382,7 +375,7 @@ The system SHALL provide OpenAPI 3.x specification for all image ingest endpoint
 
 #### Scenario: Response schemas defined
 - **WHEN** OpenAPI spec defines responses
-- **THEN** JSON response schemas include all fields (sid, sha256, blake3, metadata, uploadedAt) with types and descriptions
+- **THEN** JSON response schemas include all fields (id, sha256, metadata, uploadedAt) with types and descriptions
 
 #### Scenario: Error responses documented
 - **WHEN** OpenAPI spec includes error responses
@@ -390,7 +383,7 @@ The system SHALL provide OpenAPI 3.x specification for all image ingest endpoint
 
 #### Scenario: Custom headers documented
 - **WHEN** OpenAPI spec describes optional headers
-- **THEN** X-Client-SHA256 and X-Client-BLAKE3 headers are documented with type (string), format (hex), and description
+- **THEN** X-Client-SHA256 header is documented with type (string), format (hex), and description
 
 #### Scenario: Authentication scheme specified
 - **WHEN** OpenAPI spec defines security

@@ -3,11 +3,11 @@
 ## ADDED Requirements
 
 ### Requirement: Image Upload with Authentication
-The system SHALL accept authenticated image uploads via POST endpoint and return upload confirmation with stable asset ID.
+The system SHALL accept authenticated image uploads via POST endpoint and return upload confirmation with content-addressed ID.
 
 #### Scenario: Successful authenticated upload
 - **WHEN** a client sends a POST request to `/images` with valid Bearer token and image file
-- **THEN** the system returns 201 Created with `sid`, `sha256`, `blake3`, and upload metadata
+- **THEN** the system returns 201 Created with `id` (format: `sha256:...`), `sha256`, and upload metadata
 
 #### Scenario: Missing authentication
 - **WHEN** a client sends a POST request without Authorization header
@@ -25,77 +25,54 @@ The system SHALL accept authenticated image uploads via POST endpoint and return
 - **WHEN** a client sends a POST request without a file in form data
 - **THEN** the system returns 400 Bad Request
 
-### Requirement: Dual Content Hashing
-The system SHALL compute both SHA256 and BLAKE3 hashes for every uploaded image to enable deduplication and future-proof integrity verification.
+### Requirement: SHA256 Content Hashing
+The system SHALL compute SHA256 hash for every uploaded image using the Web Crypto API to enable content-addressed storage and deduplication.
 
-#### Scenario: Server computes both hashes
-- **WHEN** an image is uploaded without client-provided hashes
-- **THEN** the system computes both SHA256 and BLAKE3 hashes from the file buffer
+#### Scenario: Server computes SHA256 hash
+- **WHEN** an image is uploaded without client-provided hash
+- **THEN** the system computes SHA256 hash from the file buffer using Web Crypto API
 
-#### Scenario: Hashes stored in all locations
-- **WHEN** hashes are computed
-- **THEN** both hashes are stored in R2 blob custom headers and metadata JSON
+#### Scenario: Hash stored in all locations
+- **WHEN** hash is computed
+- **THEN** SHA256 hash is stored in R2 blob custom headers and metadata JSON
 
-#### Scenario: SHA256 used for deduplication
-- **WHEN** checking if image already exists
-- **THEN** the system uses SHA256 hash for lookup (wider compatibility)
+#### Scenario: SHA256 used for ID generation
+- **WHEN** generating content-addressed ID
+- **THEN** the system uses format `sha256:{hex}` where {hex} is the hex-encoded SHA256 hash
 
 ### Requirement: Client Hash Optimization
-The system SHALL accept optional client-computed hashes via HTTP headers and validate them server-side to enable pre-upload deduplication and reduce Worker CPU usage.
+The system SHALL accept optional client-computed SHA256 hash via HTTP header and validate it server-side to reduce Worker CPU usage.
 
 #### Scenario: Client provides valid SHA256
 - **WHEN** client sends `X-Client-SHA256` header with correct hash
 - **THEN** server computes SHA256, validates match, and uses validated hash
 
-#### Scenario: Client provides valid BLAKE3
-- **WHEN** client sends `X-Client-BLAKE3` header with correct hash
-- **THEN** server computes BLAKE3, validates match, and uses validated hash
-
 #### Scenario: Client hash mismatch detected
 - **WHEN** client-provided hash does not match server computation
 - **THEN** system returns 400 Bad Request with "Hash mismatch - possible corruption" error
 
-#### Scenario: Missing client hashes
-- **WHEN** client does not provide hash headers
-- **THEN** server computes hashes without validation and proceeds normally
+#### Scenario: Missing client hash
+- **WHEN** client does not provide `X-Client-SHA256` header
+- **THEN** server computes SHA256 hash without validation and proceeds normally
 
-### Requirement: Pre-Upload Deduplication Endpoint
-The system SHALL provide a HEAD endpoint to check if an image already exists by SHA256 hash, enabling clients to skip redundant uploads.
+### Requirement: Content-Addressed Storage
+The system SHALL use SHA256 hash directly as the image identifier, enabling deterministic deduplication and content-addressed storage.
 
-#### Scenario: Stubbed response in Phase 1
-- **WHEN** client sends `HEAD /api/photos/check/:sha256` in Phase 1 (before D1 indexing)
-- **THEN** system returns 404 Not Found (stub behavior until Phase 2 adds D1 lookup)
+#### Scenario: ID from content hash
+- **WHEN** an image is uploaded
+- **THEN** ID is generated as `sha256:{hash}` where {hash} is the hex-encoded SHA256
 
-#### Scenario: Unauthenticated check request
-- **WHEN** client sends HEAD request without valid Bearer token
-- **THEN** system returns 401 Unauthorized
+#### Scenario: Deterministic deduplication
+- **WHEN** the same image file is uploaded multiple times
+- **THEN** the same ID is generated each time (same bytes = same ID)
 
-#### Scenario: Client workflow optimization
-- **WHEN** Phase 2+ adds D1 lookup and image exists
-- **THEN** system returns 200 OK with `X-Stable-ID` header, allowing client to skip upload
+#### Scenario: R2 key from ID
+- **WHEN** storing files in R2
+- **THEN** artifact key is `photos/sha256_{hash}.jpg` and metadata key is `photos/sha256_{hash}.json`
 
-### Requirement: Stable Asset ID Generation
-The system SHALL generate deterministic stable IDs (SID) based on content hash and EXIF metadata using UUIDv5 namespace hashing.
-
-#### Scenario: SID from complete EXIF data
-- **WHEN** image has SHA256, DateTimeOriginal, Make, and Model in EXIF
-- **THEN** SID is computed as `uuidv5(namespace, sha256 + dateTimeOriginal + make + model)`
-
-#### Scenario: SID with missing EXIF fields
-- **WHEN** image lacks DateTimeOriginal, Make, or Model
-- **THEN** missing fields are replaced with fallbacks (uploadDate, "unknown", "unknown") and SID is still deterministic
-
-#### Scenario: Deterministic SID generation
-- **WHEN** the same image is uploaded multiple times
-- **THEN** the same SID is generated each time (deduplication)
-
-#### Scenario: SID uniqueness
+#### Scenario: ID uniqueness
 - **WHEN** two different images are uploaded
-- **THEN** they receive different SIDs (collision probability negligible with UUIDv5 + SHA256)
-
-#### Scenario: Namespace UUID documented
-- **WHEN** SID generation service is implemented
-- **THEN** namespace UUID constant is hardcoded and clearly documented for use in other systems
+- **THEN** they receive different IDs (different bytes = different SHA256)
 
 ### Requirement: EXIF Metadata Extraction
 The system SHALL extract comprehensive metadata from uploaded images including camera settings, GPS coordinates, timestamps, and IPTC text fields using the exifr library.
@@ -124,31 +101,27 @@ The system SHALL extract comprehensive metadata from uploaded images including c
 The system SHALL store image blobs and metadata JSON in separate R2 buckets with identical key structures for separation of concerns.
 
 #### Scenario: Blob stored in sr-artifact
-- **WHEN** an image is uploaded with SID `sid_abc123` and MIME type `image/jpeg`
-- **THEN** blob is written to `sr-artifact/photos/sid_abc123.jpg`
+- **WHEN** an image is uploaded with ID `sha256:abc123...` and MIME type `image/jpeg`
+- **THEN** blob is written to `sr-artifact/photos/sha256_abc123.jpg`
 
 #### Scenario: Metadata JSON stored in sr-json
-- **WHEN** an image is uploaded with SID `sid_abc123`
-- **THEN** complete metadata JSON is written to `sr-json/photos/sid_abc123.json`
+- **WHEN** an image is uploaded with ID `sha256:abc123...`
+- **THEN** complete metadata JSON is written to `sr-json/photos/sha256_abc123.json`
 
 #### Scenario: File extension matches MIME type
 - **WHEN** MIME type is `image/jpeg`, `image/png`, `image/gif`, or `image/webp`
 - **THEN** file extension is `.jpg`, `.png`, `.gif`, or `.webp` respectively
 
 #### Scenario: Parallel key structure
-- **WHEN** blob key is `photos/sid_abc123.jpg`
-- **THEN** metadata key is `photos/sid_abc123.json` (same path structure, different bucket)
+- **WHEN** blob key is `photos/sha256_abc123.jpg`
+- **THEN** metadata key is `photos/sha256_abc123.json` (same path structure, different bucket)
 
 ### Requirement: R2 Custom Metadata Headers
 The system SHALL store key metadata in custom HTTP headers (x-amz-*) on blob objects for fast access without fetching the full file.
 
-#### Scenario: Content hashes in headers
+#### Scenario: Content hash in headers
 - **WHEN** blob is written to sr-artifact
-- **THEN** headers include `x-amz-sha256` and `x-amz-blake3` with hex-encoded hashes
-
-#### Scenario: Stable ID in headers
-- **WHEN** blob is written to sr-artifact
-- **THEN** header `x-amz-stable-id` contains the SID
+- **THEN** header `x-amz-sha256` contains hex-encoded SHA256 hash
 
 #### Scenario: Upload timestamp in headers
 - **WHEN** blob is written to sr-artifact
@@ -171,7 +144,7 @@ The system SHALL write complete, uncompressed JSON files to sr-json containing f
 
 #### Scenario: Complete JSON structure
 - **WHEN** metadata JSON is written
-- **THEN** it contains fields: `sid`, `sha256`, `blake3`, `file` (size, mime, dimensions), `exif`, `iptc`, `uploadedAt`, `source`
+- **THEN** it contains fields: `id`, `sha256`, `file` (size, mime, dimensions), `exif`, `iptc`, `uploadedAt`, `source`
 
 #### Scenario: Nested file metadata
 - **WHEN** JSON `file` object is written
@@ -210,7 +183,7 @@ The system SHALL validate all inputs and provide clear error messages for debugg
 
 #### Scenario: Detailed error logging
 - **WHEN** any error occurs
-- **THEN** system logs error with context: sid, sha256, operation, timestamp
+- **THEN** system logs error with context: id, sha256, operation, timestamp
 
 ### Requirement: Source Tracking
 The system SHALL track the upload source (PWA or migration) for each photo to enable analytics and troubleshooting.

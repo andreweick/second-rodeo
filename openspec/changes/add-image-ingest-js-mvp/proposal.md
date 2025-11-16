@@ -12,11 +12,11 @@ The current image upload endpoint is a mock implementation for testing. We need 
 ## What Changes
 
 ### New Capabilities
-- **Dual Content Hashing**: BLAKE3 + SHA256 computed client-side (optional) and validated server-side
+- **Content-Addressed Storage**: SHA256-based IDs for deterministic deduplication
+- **SHA256 Content Hashing**: SHA256 computed client-side (optional) and validated server-side
 - **Pre-Upload Deduplication**: HEAD endpoint to check if image already exists before uploading
 - **Parallel R2 Storage**: Blobs in `sr-artifact` bucket, metadata JSON in `sr-json` bucket (same key structure)
-- **Stable Asset IDs (SID)**: Deterministic IDs based on content hash + EXIF metadata
-- **Custom R2 Metadata**: x-amz headers for hashes, timestamps, and stable IDs
+- **Custom R2 Metadata**: x-amz headers for hashes, timestamps, and source tracking
 - **Full-Text Search**: SQLite FTS5 index on photo captions, titles, keywords, and locations
 - **Async D1 Indexing**: Queue-based lightweight indexing for fast queries
 
@@ -31,8 +31,8 @@ The current image upload endpoint is a mock implementation for testing. We need 
 - OpenAPI 3.x specification for all endpoints
 
 ### Dependencies
-- Add BLAKE3 hashing library (e.g., `@noble/hashes`)
 - Use existing: `exifr`, Drizzle ORM, Cloudflare Queues
+- SHA256 available via Web Crypto API (no additional dependencies)
 
 ## Impact
 
@@ -44,7 +44,6 @@ The current image upload endpoint is a mock implementation for testing. We need 
 - `apps/api/src/handlers/http.ts` - Add deduplication endpoint
 - `apps/api/src/handlers/queue.ts` - Add photo indexing consumer
 - `apps/api/src/db/schema.ts` - Add photos tables
-- `apps/api/package.json` - Add BLAKE3 dependency
 
 ### Non-Breaking
 This is a new capability with no breaking changes to existing systems. The current queue-based architecture for other content types remains unchanged.

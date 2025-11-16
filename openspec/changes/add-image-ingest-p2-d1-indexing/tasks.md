@@ -2,7 +2,7 @@
 
 ## 1. Database Schema (Drizzle ORM)
 - [ ] 1.1 Add `photos` table to `apps/api/src/db/schema.ts`
-- [ ] 1.2 Define columns: sid (PK), sha256 (unique), blake3, takenAt, uploadedAt, cameraMake, cameraModel, lensModel, gpsLat, gpsLon, width, height, mimeType, fileSize, r2Key, source, createdAt, updatedAt
+- [ ] 1.2 Define columns: id (PK, format: "sha256:..."), sha256 (unique), takenAt, uploadedAt, cameraMake, cameraModel, lensModel, gpsLat, gpsLon, width, height, mimeType, fileSize, r2Key, source, createdAt, updatedAt
 - [ ] 1.3 Add TypeScript types for Photo (inferSelect, inferInsert)
 - [ ] 1.4 Generate Drizzle migration: `just migrate`
 - [ ] 1.5 Add indexes:
@@ -17,11 +17,11 @@
 
 ### 2.1 Photo Indexer Service
 - [ ] 2.1.1 Create `apps/api/src/services/photo-indexer.ts`
-- [ ] 2.1.2 Implement `indexPhotoToD1(sid: string, r2Key: string, env: Env)`
+- [ ] 2.1.2 Implement `indexPhotoToD1(id: string, r2Key: string, env: Env)`
 - [ ] 2.1.3 Fetch JSON from sr-json bucket using r2Key
 - [ ] 2.1.4 Parse and validate JSON structure
 - [ ] 2.1.5 Build upsert query for `photos` table using Drizzle
-- [ ] 2.1.6 Execute upsert with `ON CONFLICT(sid) DO UPDATE`
+- [ ] 2.1.6 Execute upsert with `ON CONFLICT(id) DO UPDATE`
 - [ ] 2.1.7 Handle errors and log results
 - [ ] 2.1.8 Write unit tests for indexer
 
@@ -34,7 +34,7 @@
 
 ### 2.3 Upload Service Queue Integration
 - [ ] 2.3.1 Update `apps/api/src/services/image-upload.ts`
-- [ ] 2.3.2 After R2 writes succeed, send queue message with `{type: 'photo', sid, r2Key}`
+- [ ] 2.3.2 After R2 writes succeed, send queue message with `{type: 'photo', id, r2Key}`
 - [ ] 2.3.3 Handle queue send failures (log but don't fail upload)
 - [ ] 2.3.4 Add logging for queue message send
 
@@ -44,7 +44,7 @@
 - [ ] 3.1.1 Update `HEAD /api/photos/check/:sha256` in `apps/api/src/handlers/http.ts`
 - [ ] 3.1.2 Remove stub logic (404 always)
 - [ ] 3.1.3 Query D1 photos table by sha256 using Drizzle
-- [ ] 3.1.4 If found: return 200 OK with `X-Stable-ID` header
+- [ ] 3.1.4 If found: return 200 OK with `X-Photo-ID` header (format: "sha256:...")
 - [ ] 3.1.5 If not found: return 404 Not Found
 - [ ] 3.1.6 Add error handling for D1 query failures
 - [ ] 3.1.7 Add logging for deduplication checks
@@ -76,10 +76,10 @@
 
 ### 5.3 Manual Testing
 - [ ] 5.3.1 Upload test images and verify D1 records appear
-- [ ] 5.3.2 Query D1 with `just db` and verify data
-- [ ] 5.3.3 Test deduplication endpoint (HEAD request before/after indexing)
+- [ ] 5.3.2 Query D1 with `just db` and verify data (check id format "sha256:...")
+- [ ] 5.3.3 Test deduplication endpoint (HEAD request before/after indexing, verify X-Photo-ID header)
 - [ ] 5.3.4 Test queue consumer logs
-- [ ] 5.3.5 Upload duplicate image and verify existing SID returned
+- [ ] 5.3.5 Upload duplicate image and verify existing ID returned
 
 ## 6. Wrangler Configuration
 - [ ] 6.1 Update `apps/api/wrangler.jsonc` with queue binding (if new queue needed)

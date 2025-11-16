@@ -1,9 +1,8 @@
 # Tasks: Image Ingest JavaScript MVP
 
 ## 1. Dependencies & Setup
-- [ ] 1.1 Add BLAKE3 library (`@noble/hashes`) to `apps/api/package.json`
-- [ ] 1.2 Install dependencies and verify build passes
-- [ ] 1.3 Update `apps/api/wrangler.jsonc` with queue binding (if new queue needed)
+- [ ] 1.1 Install dependencies and verify build passes
+- [ ] 1.2 Update `apps/api/wrangler.jsonc` with queue binding (if new queue needed)
 
 ## 2. Database Schema (Drizzle ORM)
 - [ ] 2.1 Add `photos` table to `apps/api/src/db/schema.ts`
@@ -19,8 +18,7 @@
 ### 3.1 Hash Computation
 - [ ] 3.1.1 Create `apps/api/src/services/hash.ts`
 - [ ] 3.1.2 Implement `computeSHA256(buffer: ArrayBuffer): Promise<string>`
-- [ ] 3.1.3 Implement `computeBLAKE3(buffer: ArrayBuffer): Promise<string>`
-- [ ] 3.1.4 Write unit tests for hash functions
+- [ ] 3.1.3 Write unit tests for SHA256 hash function
 
 ### 3.2 SID Generation
 - [ ] 3.2.1 Create `apps/api/src/services/sid.ts`
@@ -34,10 +32,10 @@
 - [ ] 3.3.2 Rewrite `uploadImage()` function:
   - [ ] Parse multipart form data
   - [ ] Validate file type and size
-  - [ ] Read client hashes from headers (optional)
+  - [ ] Read client SHA256 hash from X-Client-SHA256 header (optional)
   - [ ] Extract EXIF metadata (existing `extractMetadata()`)
-  - [ ] Compute SHA256 and BLAKE3 server-side
-  - [ ] Validate client hashes if provided
+  - [ ] Compute SHA256 server-side
+  - [ ] Validate client SHA256 hash if provided
   - [ ] Generate SID
   - [ ] Check for existing SID in D1 (deduplication)
   - [ ] Prepare blob with custom headers
@@ -90,16 +88,16 @@
 ## 6. Testing
 
 ### 6.1 Unit Tests
-- [ ] 6.1.1 Test hash functions (known inputs → expected outputs)
+- [ ] 6.1.1 Test SHA256 hash function (known inputs → expected outputs)
 - [ ] 6.1.2 Test SID generation (deterministic, handles missing EXIF)
 - [ ] 6.1.3 Test metadata JSON builder (complete structure)
-- [ ] 6.1.4 Test client hash validation (valid, invalid, missing)
+- [ ] 6.1.4 Test client SHA256 validation (valid, invalid, missing)
 
 ### 6.2 Integration Tests
 - [ ] 6.2.1 Update `apps/api/test/image-upload.spec.ts`
 - [ ] 6.2.2 Test full upload flow (file → R2 → queue → D1)
 - [ ] 6.2.3 Test deduplication (upload same file twice)
-- [ ] 6.2.4 Test client hash optimization (with/without headers)
+- [ ] 6.2.4 Test client SHA256 optimization (with/without X-Client-SHA256 header)
 - [ ] 6.2.5 Test EXIF extraction for various image formats
 - [ ] 6.2.6 Test FTS5 search queries
 - [ ] 6.2.7 Test missing EXIF fields (fallbacks)
@@ -117,8 +115,8 @@
 - [ ] 7.1 Create OpenAPI 3.x spec file (`apps/api/openapi.yaml` or `openapi.json`)
 - [ ] 7.2 Document POST /images endpoint:
   - [ ] Request schema (multipart/form-data with file field)
-  - [ ] Optional headers (X-Client-SHA256, X-Client-BLAKE3)
-  - [ ] Response schemas (201 Created with sid, sha256, blake3, metadata)
+  - [ ] Optional headers (X-Client-SHA256)
+  - [ ] Response schemas (201 Created with id, sha256, metadata)
   - [ ] Error responses (400, 401, 500 with error schemas)
   - [ ] Authentication (Bearer token security scheme)
 - [ ] 7.3 Document HEAD /api/photos/check/:sha256 endpoint:
@@ -135,7 +133,7 @@
 - [ ] 8.2 Document R2 bucket structure and key patterns
 - [ ] 8.3 Document custom headers format
 - [ ] 8.4 Document metadata JSON schema
-- [ ] 8.5 Add examples for client hash computation (PWA/CLI)
+- [ ] 8.5 Add examples for client SHA256 computation (PWA/CLI)
 - [ ] 8.6 Update README with photo upload instructions
 - [ ] 8.7 Add code comments referencing OpenAPI spec
 
