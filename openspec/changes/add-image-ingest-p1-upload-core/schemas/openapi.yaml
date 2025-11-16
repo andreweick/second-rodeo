@@ -1,0 +1,256 @@
+openapi: 3.1.0
+info:
+  title: Image Ingest API
+  version: 1.0.0
+  description: |
+    Phase 1: Image upload API with content-addressed storage, EXIF/IPTC metadata extraction,
+    and dual R2 bucket architecture (artifacts + metadata JSON).
+
+servers:
+  - url: https://api.second-rodeo.dev
+    description: Production API
+
+paths:
+  /images:
+    post:
+      summary: Upload image with metadata extraction
+      description: |
+        Uploads an image file, extracts EXIF/IPTC metadata, computes SHA256 hash,
+        and stores the image blob in sr-artifact bucket and metadata JSON in sr-json bucket.
+
+        **Client Hash Optimization:**
+        Clients MAY compute SHA256 hash client-side and send via `X-Client-SHA256` header.
+        Server always validates client-provided hashes and rejects on mismatch.
+
+        **Storage:**
+        - Blob: `sr-artifact/photos/sha256_{hash}.{ext}`
+        - Metadata: `sr-json/photos/sha256_{hash}.json`
+
+      operationId: uploadImage
+      tags:
+        - Images
+      security:
+        - bearerAuth: []
+
+      parameters:
+        - name: X-Client-SHA256
+          in: header
+          required: false
+          schema:
+            type: string
+            pattern: ^[a-f0-9]{64}$
+          description: |
+            Optional client-computed SHA256 hash (hex-encoded, 64 chars).
+            If provided, server validates against its own computation and rejects on mismatch.
+
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - file
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: Image file (JPEG, PNG, GIF, or WebP)
+            encoding:
+              file:
+                contentType: image/jpeg, image/png, image/gif, image/webp
+
+      responses:
+        '201':
+          description: Image uploaded successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UploadResponse'
+              examples:
+                successWithExif:
+                  summary: Upload with full EXIF metadata
+                  value:
+                    id: "sha256:a1b2c3d4e5f6789012345678901234567890abcdef1234567890abcdef123456"
+                    sha256: "a1b2c3d4e5f6789012345678901234567890abcdef1234567890abcdef123456"
+                    uploadedAt: "2025-11-16T14:23:45.123Z"
+                    metadata:
+                      file:
+                        width: 4032
+                        height: 3024
+                        size: 4562891
+                        mimeType: "image/jpeg"
+                        format: "jpeg"
+                      exif:
+                        make: "Apple"
+                        model: "iPhone 15 Pro"
+                        dateTimeOriginal: "2025-11-15T09:42:17Z"
+
+                successMinimal:
+                  summary: Upload without EXIF (e.g., screenshot)
+                  value:
+                    id: "sha256:f7d8a9b0c1e2f3a4567890abcdef1234567890abcdef1234567890abcdef1234"
+                    sha256: "f7d8a9b0c1e2f3a4567890abcdef1234567890abcdef1234567890abcdef1234"
+                    uploadedAt: "2025-11-16T14:25:12.456Z"
+                    metadata:
+                      file:
+                        width: 1920
+                        height: 1080
+                        size: 892456
+                        mimeType: "image/png"
+                        format: "png"
+
+        '400':
+          description: Bad request (validation error)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                invalidFileType:
+                  summary: Invalid file type
+                  value:
+                    error: "Invalid file type. Allowed types: image/jpeg, image/png, image/gif, image/webp"
+
+                hashMismatch:
+                  summary: Client hash validation failed
+                  value:
+                    error: "Hash mismatch - possible corruption or tampering"
+
+                missingFile:
+                  summary: No file in request
+                  value:
+                    error: "No file provided in request"
+
+                fileTooLarge:
+                  summary: File size exceeds limit
+                  value:
+                    error: "File size exceeds limit (50MB max)"
+
+        '401':
+          description: Unauthorized (missing or invalid auth token)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: "Unauthorized"
+
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                r2Failure:
+                  summary: R2 storage failure
+                  value:
+                    error: "Storage operation failed"
+
+                metadataFailure:
+                  summary: Metadata extraction failed
+                  value:
+                    error: "Metadata extraction failed"
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: Bearer token for API authentication (AUTH_TOKEN environment variable)
+
+  schemas:
+    UploadResponse:
+      type: object
+      required:
+        - id
+        - sha256
+        - uploadedAt
+      properties:
+        id:
+          type: string
+          pattern: ^sha256:[a-f0-9]{64}$
+          description: Content-addressed identifier (format 'sha256:{hex}')
+          example: "sha256:a1b2c3d4e5f6789012345678901234567890abcdef1234567890abcdef123456"
+
+        sha256:
+          type: string
+          pattern: ^[a-f0-9]{64}$
+          description: SHA256 hash of image file (hex-encoded, 64 chars)
+          example: "a1b2c3d4e5f6789012345678901234567890abcdef1234567890abcdef123456"
+
+        uploadedAt:
+          type: string
+          format: date-time
+          description: ISO8601 timestamp when image was uploaded
+          example: "2025-11-16T14:23:45.123Z"
+
+        metadata:
+          type: object
+          description: Extracted EXIF/IPTC metadata preview (subset of full metadata)
+          properties:
+            file:
+              $ref: '#/components/schemas/FileMetadata'
+            exif:
+              $ref: '#/components/schemas/ExifMetadataPreview'
+
+    FileMetadata:
+      type: object
+      required:
+        - size
+        - mimeType
+      properties:
+        width:
+          type: integer
+          minimum: 1
+          description: Image width in pixels
+          example: 4032
+        height:
+          type: integer
+          minimum: 1
+          description: Image height in pixels
+          example: 3024
+        size:
+          type: integer
+          minimum: 0
+          description: File size in bytes
+          example: 4562891
+        mimeType:
+          type: string
+          enum: [image/jpeg, image/png, image/gif, image/webp]
+          description: MIME type
+          example: "image/jpeg"
+        format:
+          type: string
+          enum: [jpeg, png, gif, webp]
+          description: File format
+          example: "jpeg"
+
+    ExifMetadataPreview:
+      type: object
+      description: Subset of EXIF metadata returned in upload response
+      properties:
+        make:
+          type: string
+          description: Camera manufacturer
+          example: "Apple"
+        model:
+          type: string
+          description: Camera model
+          example: "iPhone 15 Pro"
+        dateTimeOriginal:
+          type: string
+          format: date-time
+          description: Original capture timestamp (ISO8601)
+          example: "2025-11-15T09:42:17Z"
+
+    Error:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: string
+          description: Human-readable error message
+          example: "Invalid file type"

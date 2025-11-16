@@ -18,6 +18,7 @@ Key goals:
 - **Parallel R2 Storage**: Blobs in `sr-artifact` bucket, metadata JSON in `sr-json` bucket (same key structure)
 - **Custom R2 Metadata**: x-amz headers for hashes, timestamps, and source tracking
 - **Client Hash Optimization**: Optional X-Client-SHA256 header to offload computation
+- **Schema Validation**: Runtime validation of JSON structures before R2 writes and HTTP responses
 
 ### Replaced Components
 - `apps/api/src/services/image-upload.ts` - Complete rewrite with production logic
@@ -26,10 +27,15 @@ Key goals:
 ### New Components
 - `apps/api/src/services/hash.ts` - SHA256 hash computation utilities
 - `apps/api/src/services/metadata-json.ts` - Metadata JSON builder
+- `apps/api/src/services/schema-validator.ts` - JSON schema validation (upload response & storage metadata)
+- `schemas/upload-response.schema.json` - JSON Schema for POST /images response
+- `schemas/storage-metadata.schema.json` - JSON Schema for sr-json bucket metadata
+- `schemas/openapi.yaml` - OpenAPI 3.1 specification for image upload endpoint
 
 ### Dependencies
 - Use existing: `exifr`, Cloudflare R2
 - SHA256 available via Web Crypto API (no additional dependencies)
+- Schema validation: simple in-code validation (no external libraries)
 
 ## Impact
 

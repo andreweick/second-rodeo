@@ -136,23 +136,85 @@ Server always computes SHA256 hash and validates against client-provided value.
 - **Metadata in D1 only:** Loses full fidelity, can't rebuild
 
 **JSON Structure:**
+
+See formal schemas in `schemas/` directory:
+- **Storage metadata JSON:** `schemas/storage-metadata.schema.json` (complete JSON stored in sr-json bucket)
+- **Upload response JSON:** `schemas/upload-response.schema.json` (response from POST /images)
+- **OpenAPI specification:** `schemas/openapi.yaml` (complete API contract)
+
+**Storage Metadata (sr-json bucket):**
 ```json
 {
-  "id": "sha256:abc123...",
-  "sha256": "abc123...",
-  "file": { /* size, mime, dimensions */ },
-  "exif": { /* camera, settings, GPS */ },
-  "iptc": { /* title, caption, keywords */ },
-  "uploadedAt": "2025-10-28T12:00:00Z",
-  "source": "pwa" | "migration"
+  "id": "sha256:abc123...",              // Required: content-addressed ID
+  "sha256": "abc123...",                 // Required: hex hash
+  "file": {                              // Required: file metadata
+    "originalName": "IMG_2024.jpg",      // Optional
+    "width": 4032,                       // Optional
+    "height": 3024,                      // Optional
+    "size": 4562891,                     // Required
+    "mimeType": "image/jpeg",            // Required
+    "format": "jpeg"                     // Optional
+  },
+  "exif": {                              // Optional: camera/capture metadata
+    "make": "Apple",
+    "model": "iPhone 15 Pro",
+    "dateTimeOriginal": "2025-11-15T09:42:17Z",
+    "latitude": 37.7749,
+    "longitude": -122.4194,
+    "iso": 64,
+    "fNumber": 1.78,
+    "exposureTime": 0.00125,
+    "focalLength": 6.86,
+    "orientation": 1,
+    "software": "iOS 18.1"
+  },
+  "iptc": {                              // Optional: text metadata
+    "objectName": "Golden Gate Bridge",
+    "caption": "View from Baker Beach",
+    "keywords": ["san francisco", "sunset"],
+    "creator": "Andy Eick",
+    "city": "San Francisco",
+    "country": "USA"
+  },
+  "icc": {                               // Optional: color profile
+    "colorSpace": "sRGB",
+    "description": "Display P3"
+  },
+  "uploadedAt": "2025-11-16T14:23:45Z",  // Required: ISO8601
+  "source": "pwa"                        // Required: "pwa" | "migration"
 }
 ```
 
-Future C2PA update:
+**Upload Response (POST /images returns):**
+```json
+{
+  "id": "sha256:abc123...",              // Required
+  "sha256": "abc123...",                 // Required
+  "uploadedAt": "2025-11-16T14:23:45Z",  // Required
+  "metadata": {                          // Optional: preview of extracted data
+    "file": {
+      "width": 4032,
+      "height": 3024,
+      "size": 4562891,
+      "mimeType": "image/jpeg",
+      "format": "jpeg"
+    },
+    "exif": {                            // Optional subset for quick preview
+      "make": "Apple",
+      "model": "iPhone 15 Pro",
+      "dateTimeOriginal": "2025-11-15T09:42:17Z"
+    }
+  }
+}
+```
+
+Future C2PA update will add optional `c2pa` field to storage metadata:
 ```json
 {
   /* existing fields */
-  "c2pa": { /* manifest, assertions, trust */ }
+  "c2pa": {                              // Optional: content authenticity
+    /* manifest, assertions, trust */
+  }
 }
 ```
 
@@ -176,7 +238,42 @@ x-amz-source: pwa|migration   # Origin
 **No R2 Object Tags:**
 Tags are redundant with headers + D1 + JSON. Skip for MVP to reduce complexity.
 
+### 7. Schema Validation
 
+**Decision:** Validate all JSON structures against schemas before R2 writes and HTTP responses
+
+**Rationale:**
+- **Data Quality:** Ensures only valid, complete data is stored in R2
+- **Early Detection:** Catches missing fields or format errors before they reach storage
+- **Fail-Fast:** Prevents inconsistent data from being written to production
+- **Documentation:** Schemas serve as executable documentation of data contracts
+- **Type Safety:** Runtime validation complements TypeScript compile-time checks
+
+**Implementation:**
+- Use simple in-code validation (no external libraries needed for MVP)
+- Validate upload responses before returning from POST /images
+- Validate storage metadata before writing to sr-json bucket
+- Schema validation failures return 500 Internal Server Error with logged details
+- Required field checks: `id`, `sha256`, `uploadedAt`, `source`, `file.size`, `file.mimeType`
+- Format pattern checks: ID format (`sha256:{hex}`), SHA256 format (64-char hex)
+
+**Validation Points:**
+```typescript
+// Before R2 write
+const metadata = buildMetadataJSON(...);
+validateStorageMetadata(metadata);  // Throws on failure
+await env.SR_JSON.put(key, JSON.stringify(metadata));
+
+// Before HTTP response
+const response = { id, sha256, uploadedAt, metadata };
+validateUploadResponse(response);  // Throws on failure
+return Response.json(response, { status: 201 });
+```
+
+**Alternatives Considered:**
+- **No runtime validation:** Risky, allows invalid data into storage
+- **AJV library:** Adds dependency, may not work in V8 Isolates, overkill for MVP
+- **Zod validation:** Cleaner but adds dependency, deferred to future refactor
 
 ## Risks / Trade-offs
 

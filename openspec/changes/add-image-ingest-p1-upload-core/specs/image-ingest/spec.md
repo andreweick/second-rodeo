@@ -166,6 +166,31 @@ The system SHALL write complete, uncompressed JSON files to sr-json containing f
 - **WHEN** metadata is updated (e.g., adding fields in future phases)
 - **THEN** the entire JSON file is overwritten with merged data (no event sourcing)
 
+### Requirement: Schema Validation
+The system SHALL validate upload responses and storage metadata against JSON schemas before returning responses and writing to R2.
+
+#### Scenario: Upload response validation
+- **WHEN** preparing upload response for POST /images
+- **THEN** response JSON SHALL be validated against `schemas/upload-response.schema.json`
+- **AND** validation failure SHALL prevent response and log schema violation error
+
+#### Scenario: Storage metadata validation
+- **WHEN** preparing metadata JSON for R2 storage
+- **THEN** metadata JSON SHALL be validated against `schemas/storage-metadata.schema.json`
+- **AND** validation failure SHALL prevent R2 write and return 500 Internal Server Error
+
+#### Scenario: Required field enforcement
+- **WHEN** schema validation runs
+- **THEN** all required fields (id, sha256, uploadedAt, source) SHALL be present
+- **AND** missing required fields SHALL cause validation failure
+
+#### Scenario: Format validation
+- **WHEN** schema validation runs
+- **THEN** id SHALL match pattern `^sha256:[a-f0-9]{64}$`
+- **AND** sha256 SHALL match pattern `^[a-f0-9]{64}$`
+- **AND** timestamps SHALL be valid ISO8601 format
+- **AND** source SHALL be enum value "pwa" or "migration"
+
 ### Requirement: Error Handling and Validation
 The system SHALL validate all inputs and provide clear error messages for debugging and client feedback.
 
