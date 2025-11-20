@@ -1,3 +1,8 @@
+- DO NOT deploy the application, but tell me it is ready to be deployed.
+- DO NOT install any dependcies, review them with me and i will add them manually.
+- ALWAYS check any depncies that you want to add to be compatible with cloudflare workers and V8 Isolates
+- 
+
 <!-- OPENSPEC:START -->
 # OpenSpec Instructions
 

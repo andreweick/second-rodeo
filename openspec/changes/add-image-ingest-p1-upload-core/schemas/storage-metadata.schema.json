@@ -1,0 +1,228 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://second-rodeo.dev/schemas/image-storage-metadata.json",
+  "title": "Image Storage Metadata",
+  "description": "Complete metadata JSON stored in sr-json bucket at photos/sha256_{hash}.json",
+  "type": "object",
+  "required": ["id", "sha256", "file", "uploadedAt", "source"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$",
+      "description": "Content-addressed identifier matching the SHA256 hash of the image file"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$",
+      "description": "SHA256 hash of the image file content (hex-encoded, 64 characters)"
+    },
+    "file": {
+      "type": "object",
+      "required": ["size", "mimeType"],
+      "description": "File metadata and dimensions",
+      "properties": {
+        "originalName": {
+          "type": "string",
+          "description": "Original filename from upload (if available)"
+        },
+        "width": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Image width in pixels"
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Image height in pixels"
+        },
+        "size": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "File size in bytes"
+        },
+        "mimeType": {
+          "type": "string",
+          "enum": ["image/jpeg", "image/png", "image/gif", "image/webp"],
+          "description": "MIME type of the image"
+        },
+        "format": {
+          "type": "string",
+          "enum": ["jpeg", "png", "gif", "webp"],
+          "description": "File format derived from MIME type"
+        }
+      }
+    },
+    "exif": {
+      "type": "object",
+      "description": "EXIF metadata from the image (camera settings, GPS, timestamps)",
+      "properties": {
+        "make": {
+          "type": "string",
+          "description": "Camera manufacturer"
+        },
+        "model": {
+          "type": "string",
+          "description": "Camera model"
+        },
+        "lensModel": {
+          "type": "string",
+          "description": "Lens model used to capture the image"
+        },
+        "dateTimeOriginal": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Original capture timestamp (ISO8601)"
+        },
+        "latitude": {
+          "type": "number",
+          "minimum": -90,
+          "maximum": 90,
+          "description": "GPS latitude in decimal degrees"
+        },
+        "longitude": {
+          "type": "number",
+          "minimum": -180,
+          "maximum": 180,
+          "description": "GPS longitude in decimal degrees"
+        },
+        "iso": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "ISO sensitivity setting"
+        },
+        "fNumber": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Aperture f-number (e.g., 2.8 for f/2.8)"
+        },
+        "exposureTime": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Shutter speed in seconds (e.g., 0.005 for 1/200s)"
+        },
+        "focalLength": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Focal length in millimeters"
+        },
+        "orientation": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 8,
+          "description": "EXIF orientation value (1-8)"
+        },
+        "software": {
+          "type": "string",
+          "description": "Software used to process the image"
+        }
+      }
+    },
+    "iptc": {
+      "type": "object",
+      "description": "IPTC metadata (title, caption, keywords, copyright)",
+      "properties": {
+        "objectName": {
+          "type": "string",
+          "description": "Image title or object name"
+        },
+        "caption": {
+          "type": "string",
+          "description": "Image caption or description"
+        },
+        "keywords": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Keywords or tags associated with the image"
+        },
+        "copyrightNotice": {
+          "type": "string",
+          "description": "Copyright information"
+        },
+        "creator": {
+          "type": "string",
+          "description": "Photographer or creator name"
+        },
+        "credit": {
+          "type": "string",
+          "description": "Credit line or attribution"
+        },
+        "city": {
+          "type": "string",
+          "description": "City where the image was captured"
+        },
+        "country": {
+          "type": "string",
+          "description": "Country where the image was captured"
+        }
+      }
+    },
+    "icc": {
+      "type": "object",
+      "description": "ICC color profile information",
+      "properties": {
+        "colorSpace": {
+          "type": "string",
+          "description": "Color space (e.g., sRGB, Adobe RGB)"
+        },
+        "description": {
+          "type": "string",
+          "description": "ICC profile description"
+        }
+      }
+    },
+    "uploadedAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO8601 timestamp when the image was uploaded to R2"
+    },
+    "source": {
+      "type": "string",
+      "enum": ["pwa", "migration"],
+      "description": "Upload origin: 'pwa' for web app uploads, 'migration' for bulk imports"
+    }
+  },
+  "examples": [
+    {
+      "id": "sha256:a1b2c3d4e5f6789012345678901234567890abcdef1234567890abcdef123456",
+      "sha256": "a1b2c3d4e5f6789012345678901234567890abcdef1234567890abcdef123456",
+      "file": {
+        "originalName": "IMG_2024.jpg",
+        "width": 4032,
+        "height": 3024,
+        "size": 4562891,
+        "mimeType": "image/jpeg",
+        "format": "jpeg"
+      },
+      "exif": {
+        "make": "Apple",
+        "model": "iPhone 15 Pro",
+        "lensModel": "iPhone 15 Pro back triple camera 6.86mm f/1.78",
+        "dateTimeOriginal": "2025-11-15T09:42:17Z",
+        "latitude": 37.7749,
+        "longitude": -122.4194,
+        "iso": 64,
+        "fNumber": 1.78,
+        "exposureTime": 0.00125,
+        "focalLength": 6.86,
+        "orientation": 1,
+        "software": "iOS 18.1"
+      },
+      "iptc": {
+        "objectName": "Golden Gate Bridge at Sunset",
+        "caption": "View from Baker Beach",
+        "keywords": ["san francisco", "sunset", "bridge"],
+        "creator": "Andy Eick",
+        "city": "San Francisco",
+        "country": "USA"
+      },
+      "icc": {
+        "colorSpace": "sRGB",
+        "description": "Display P3"
+      },
+      "uploadedAt": "2025-11-16T14:23:45.123Z",
+      "source": "pwa"
+    }
+  ]
+}

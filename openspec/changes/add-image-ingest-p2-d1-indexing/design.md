@@ -32,9 +32,8 @@ Key constraints:
 **Schema:**
 ```typescript
 export const photos = sqliteTable('photos', {
-  sid: text('sid').primaryKey(),
+  id: text('id').primaryKey(),  // Format: "sha256:abc123..."
   sha256: text('sha256').notNull().unique(),
-  blake3: text('blake3').notNull(),
   takenAt: integer('taken_at', { mode: 'timestamp' }),
   uploadedAt: integer('uploaded_at', { mode: 'timestamp' }).notNull(),
   cameraMake: text('camera_make'),
@@ -81,13 +80,13 @@ CREATE INDEX idx_photos_source ON photos(source);
 ```
 POST /images
   ↓
-[Extract EXIF, compute hashes, generate SID] (Phase 1)
+[Extract EXIF, compute SHA256 hash, generate ID] (Phase 1)
   ↓
 [Write blob to sr-artifact] ← Synchronous
   ↓
 [Write JSON to sr-json] ← Synchronous
   ↓
-[Send queue message: {type: 'photo', sid, r2Key}] ← Fire and forget
+[Send queue message: {type: 'photo', id, r2Key}] ← Fire and forget
   ↓
 [Return 201 Created to client]
 
@@ -97,7 +96,7 @@ Queue Consumer (async):
   ↓
 [Parse JSON and extract D1 fields]
   ↓
-[Upsert photos table with ON CONFLICT(sid) DO UPDATE]
+[Upsert photos table with ON CONFLICT(id) DO UPDATE]
 ```
 
 **Rationale:**
@@ -111,8 +110,8 @@ Queue Consumer (async):
 ```json
 {
   "type": "photo",
-  "sid": "sid_abc123",
-  "r2Key": "photos/sid_abc123.json"
+  "id": "sha256:abc123...",
+  "r2Key": "photos/sha256_abc123.json"
 }
 ```
 
@@ -127,11 +126,10 @@ Queue Consumer (async):
 
 **SQL Pattern:**
 ```sql
-INSERT INTO photos (sid, sha256, blake3, ...)
-VALUES (?, ?, ?, ...)
-ON CONFLICT(sid) DO UPDATE SET
+INSERT INTO photos (id, sha256, ...)
+VALUES (?, ?, ...)
+ON CONFLICT(id) DO UPDATE SET
   sha256 = excluded.sha256,
-  blake3 = excluded.blake3,
   taken_at = excluded.taken_at,
   -- ... all fields
   updated_at = unixepoch()
@@ -149,7 +147,7 @@ WHERE excluded.sha256 != photos.sha256 OR excluded.updated_at > photos.updated_a
 await db.insert(photos)
   .values(photoData)
   .onConflictDoUpdate({
-    target: photos.sid,
+    target: photos.id,
     set: photoData
   });
 ```
@@ -172,7 +170,7 @@ const photo = await db.select().from(photos).where(eq(photos.sha256, sha256)).li
 if (photo.length > 0) {
   return new Response(null, {
     status: 200,
-    headers: { 'X-Stable-ID': photo[0].sid }
+    headers: { 'X-Photo-ID': photo[0].id }
   });
 } else {
   return new Response(null, { status: 404 });
@@ -188,7 +186,7 @@ if (photo.length > 0) {
 **Client Flow:**
 1. Client computes SHA256 locally
 2. Client calls `HEAD /api/photos/check/:sha256`
-3. If 200 OK: Skip upload, use SID from header
+3. If 200 OK: Skip upload, use ID from X-Photo-ID header
 4. If 404: Proceed with upload
 
 ### 5. Basic Query Functions
@@ -255,7 +253,7 @@ async function rebuildPhotosD1(env: Env) {
   for (const item of list.objects) {
     const json = await bucket.get(item.key);
     const data = await json.json();
-    await indexPhotoToD1(data.sid, item.key, env);
+    await indexPhotoToD1(data.id, item.key, env);
   }
 }
 ```
@@ -267,7 +265,7 @@ async function rebuildPhotosD1(env: Env) {
 **Upload Service:**
 ```typescript
 try {
-  await env.QUEUE.send({ type: 'photo', sid, r2Key });
+  await env.QUEUE.send({ type: 'photo', id, r2Key });
 } catch (err) {
   console.error('Queue send failed:', err);
   // Don't fail upload - indexing can be retried/rebuilt
@@ -277,7 +275,7 @@ try {
 **Queue Consumer:**
 ```typescript
 try {
-  await indexPhotoToD1(message.sid, message.r2Key, env);
+  await indexPhotoToD1(message.id, message.r2Key, env);
 } catch (err) {
   console.error('D1 indexing failed:', err);
   throw err; // Retry via queue
@@ -298,7 +296,7 @@ try {
 **Mitigation:**
 - Queues typically process in seconds
 - Client can poll deduplication endpoint to verify indexing
-- R2 JSON is always authoritative (can fetch directly by SID)
+- R2 JSON is always authoritative (can fetch directly by ID)
 - Monitor queue depth
 
 **Likelihood:** Low, acceptable for async pattern
@@ -319,7 +317,7 @@ try {
 
 **Mitigation:**
 - Acceptable for archive use case (not real-time)
-- Client can fetch R2 JSON directly by SID if needed
+- Client can fetch R2 JSON directly by ID if needed
 - Deduplication endpoint checks D1 (may miss very recent uploads)
 
 **Accepted:** Async pattern is worth the trade-off

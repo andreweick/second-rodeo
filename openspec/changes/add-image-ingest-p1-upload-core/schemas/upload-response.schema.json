@@ -1,0 +1,101 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://second-rodeo.dev/schemas/image-upload-response.json",
+  "title": "Image Upload Response",
+  "description": "Response returned by POST /images after successful image upload",
+  "type": "object",
+  "required": ["id", "sha256", "uploadedAt"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$",
+      "description": "Content-addressed identifier in format 'sha256:{hex}'"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$",
+      "description": "SHA256 hash of the image file (hex-encoded, 64 characters)"
+    },
+    "uploadedAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO8601 timestamp when the image was uploaded to R2"
+    },
+    "metadata": {
+      "type": "object",
+      "description": "Extracted EXIF/IPTC metadata preview (subset of full metadata stored in R2)",
+      "properties": {
+        "file": {
+          "type": "object",
+          "required": ["size", "mimeType"],
+          "properties": {
+            "width": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Image width in pixels"
+            },
+            "height": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Image height in pixels"
+            },
+            "size": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "File size in bytes"
+            },
+            "mimeType": {
+              "type": "string",
+              "enum": ["image/jpeg", "image/png", "image/gif", "image/webp"],
+              "description": "MIME type of the uploaded image"
+            },
+            "format": {
+              "type": "string",
+              "description": "File format (jpeg, png, gif, webp)"
+            }
+          }
+        },
+        "exif": {
+          "type": "object",
+          "description": "Camera and capture settings from EXIF data",
+          "properties": {
+            "make": {
+              "type": "string",
+              "description": "Camera manufacturer (e.g., Canon, Nikon)"
+            },
+            "model": {
+              "type": "string",
+              "description": "Camera model (e.g., EOS R5, D850)"
+            },
+            "dateTimeOriginal": {
+              "type": "string",
+              "format": "date-time",
+              "description": "Original capture date/time from EXIF (ISO8601)"
+            }
+          }
+        }
+      }
+    }
+  },
+  "examples": [
+    {
+      "id": "sha256:a1b2c3d4e5f6789012345678901234567890abcdef1234567890abcdef123456",
+      "sha256": "a1b2c3d4e5f6789012345678901234567890abcdef1234567890abcdef123456",
+      "uploadedAt": "2025-11-16T14:23:45.123Z",
+      "metadata": {
+        "file": {
+          "width": 4032,
+          "height": 3024,
+          "size": 4562891,
+          "mimeType": "image/jpeg",
+          "format": "jpeg"
+        },
+        "exif": {
+          "make": "Apple",
+          "model": "iPhone 15 Pro",
+          "dateTimeOriginal": "2025-11-15T09:42:17Z"
+        }
+      }
+    }
+  ]
+}

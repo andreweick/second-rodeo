@@ -34,7 +34,7 @@ Key constraints:
 **Schema:**
 ```sql
 CREATE VIRTUAL TABLE photos_fts USING fts5(
-  sid UNINDEXED,      -- Join key only, not searchable
+  id UNINDEXED,       -- Join key only, not searchable (format: "sha256:...")
   title,              -- IPTC objectName
   caption,            -- IPTC caption
   keywords,           -- IPTC keywords (space-separated)
@@ -50,7 +50,7 @@ CREATE VIRTUAL TABLE photos_fts USING fts5(
 **Rationale:**
 - **FTS5 Performance:** SQLite's built-in full-text search, fast and battle-tested
 - **Porter Stemming:** "running" matches "run", "photography" matches "photograph"
-- **SID UNINDEXED:** Used only for joining, not searched (saves index space)
+- **ID UNINDEXED:** Used only for joining with photos table, not searched (saves index space)
 - **Text Fields Only:** Camera make/model included for searches like "Canon 5D"
 - **Space-Separated Keywords:** IPTC keywords array joined with spaces for FTS5
 
@@ -67,7 +67,7 @@ CREATE VIRTUAL TABLE photos_fts USING fts5(
 
 **Flow:**
 ```typescript
-async function indexPhotoToD1(sid: string, r2Key: string, env: Env) {
+async function indexPhotoToD1(id: string, r2Key: string, env: Env) {
   const json = await fetchJSONFromR2(r2Key, env);
 
   await env.DB.batch([
@@ -76,13 +76,13 @@ async function indexPhotoToD1(sid: string, r2Key: string, env: Env) {
 
     // Upsert FTS5 photos_fts table (Phase 3)
     db.run(sql`
-      INSERT INTO photos_fts (sid, title, caption, keywords, creator, city, country, camera_make, camera_model)
+      INSERT INTO photos_fts (id, title, caption, keywords, creator, city, country, camera_make, camera_model)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(rowid) DO UPDATE SET
         title = excluded.title,
         caption = excluded.caption,
         -- ... all fields
-    `, [sid, title, caption, keywords, ...])
+    `, [id, title, caption, keywords, ...])
   ]);
 }
 ```
@@ -96,7 +96,7 @@ async function indexPhotoToD1(sid: string, r2Key: string, env: Env) {
 **Field Preparation:**
 ```typescript
 const ftsData = {
-  sid: json.sid,
+  id: json.id,
   title: json.iptc?.objectName || '',
   caption: json.iptc?.caption || '',
   keywords: (json.iptc?.keywords || []).join(' '), // Array → space-separated
@@ -115,7 +115,7 @@ const ftsData = {
 **Query Pattern:**
 ```sql
 SELECT p.* FROM photos p
-JOIN photos_fts fts ON p.sid = fts.sid
+JOIN photos_fts fts ON p.id = fts.id
 WHERE photos_fts MATCH ?
 ORDER BY rank
 LIMIT ? OFFSET ?
@@ -134,7 +134,7 @@ async function searchPhotos(query: string, options: SearchOptions) {
   const result = await db
     .select()
     .from(photos)
-    .innerJoin(photosFts, eq(photos.sid, photosFts.sid))
+    .innerJoin(photosFts, eq(photos.id, photosFts.id))
     .where(sql`photos_fts MATCH ${query}`)
     .orderBy(sql`rank`) // FTS5 relevance score
     .limit(options.limit || 50)
@@ -211,7 +211,7 @@ try {
 ```sql
 -- Weight title 3x, caption 2x, keywords 1x
 CREATE VIRTUAL TABLE photos_fts USING fts5(
-  sid UNINDEXED,
+  id UNINDEXED,
   title,        -- implicit weight 1.0
   caption,
   keywords,
@@ -249,7 +249,7 @@ searchPhotos("beach", {
 let query = db
   .select()
   .from(photos)
-  .innerJoin(photosFts, eq(photos.sid, photosFts.sid))
+  .innerJoin(photosFts, eq(photos.id, photosFts.id))
   .where(sql`photos_fts MATCH ${searchTerm}`);
 
 if (options.dateRange) {
@@ -285,7 +285,7 @@ async function rebuildPhotosD1(env: Env) {
     const data = await json.json();
 
     // Reindex both tables
-    await indexPhotoToD1(data.sid, item.key, env);
+    await indexPhotoToD1(data.id, item.key, env);
   }
 }
 ```

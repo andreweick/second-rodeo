@@ -39,8 +39,8 @@ This phase is purely additive (documentation). No changes to existing functional
 
 ### Future Phases
 This proposal is part 4 of 4:
-- **Phase 1** (complete): Upload core with hashing, SID, R2 storage
-- **Phase 2** (complete): D1 async indexing for queries
+- **Phase 1** (complete): Upload core with SHA256 hashing, content-addressed IDs, R2 storage
+- **Phase 2** (complete): D1 async indexing for queries and deduplication
 - **Phase 3** (complete): Full-text search with FTS5
 - **Phase 4** (this): OpenAPI documentation
 

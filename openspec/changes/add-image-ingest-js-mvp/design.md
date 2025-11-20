@@ -28,38 +28,40 @@ Key constraints:
 
 ## Decisions
 
-### 1. Stable ID (SID) Generation
+### 1. Content-Addressed Storage
 
-**Decision:** Use `uuidv5(namespace, sha256 + dateTimeOriginal + make + model)`
+**Decision:** Use SHA256 hash directly as the image identifier (format: `sha256:{hex}`)
 
 **Rationale:**
-- Deterministic: Same image always produces same SID (enables deduplication)
-- Stable across minor edits: EXIF-based components remain constant
-- Foundation for future upgrade: Can recalculate with pHash when containers are added
-- UUIDv5 provides collision resistance with namespace isolation
+- **Deterministic:** Same file always produces same ID (perfect deduplication)
+- **Simple:** No UUIDv5 computation, no namespace management, no EXIF dependency
+- **Consistent:** Matches existing codebase patterns (chatter, films, quotes all use `sha256:...` format)
+- **Content-Addressed:** ID represents the actual bytes of the file
+- **Foundation for pHash:** ID is immutable, perceptual hashing can be added as separate index
 
 **Alternatives Considered:**
-- **Random UUID:** Not deterministic, can't detect duplicates
-- **SHA256 only:** Changes on any pixel modification (too sensitive)
-- **pHash64 + EXIF:** Requires native libraries, deferred to container phase
-- **Filename-based:** Unreliable, files get renamed
+- **UUIDv5(SHA256 + EXIF):** Complex, adds EXIF dependency for ID generation, not actually stable when EXIF changes
+- **Random UUID:** Not deterministic, can't detect duplicates before upload
+- **Sequential IDs:** Not content-addressed, unsuitable for distributed systems
 
-**Fallback Strategy:**
-If EXIF fields missing:
+**ID Format:**
 ```
-dateTimeOriginal → uploadDate
-make → "unknown"
-model → "unknown"
+id = "sha256:abc123def456..."  // 64-char hex hash
 ```
-SID still deterministic based on content hash + upload timestamp.
+
+**R2 Keys:**
+```
+sr-artifact/photos/sha256_abc123def456.jpg
+sr-json/photos/sha256_abc123def456.json
+```
 
 ### 2. Parallel R2 Bucket Architecture
 
 **Decision:** Two buckets with identical key structures
 
 ```
-sr-artifact/photos/<sid>.jpg    # Image blob
-sr-json/photos/<sid>.json       # Metadata
+sr-artifact/photos/sha256_abc123.jpg    # Image blob
+sr-json/photos/sha256_abc123.json       # Metadata
 ```
 
 **Rationale:**
@@ -82,10 +84,9 @@ sr-json/photos/<sid>.json       # Metadata
 ```http
 POST /images
 X-Client-SHA256: abc123...  (optional)
-X-Client-BLAKE3: def456...  (optional)
 ```
 
-Server always computes hashes and validates against client-provided values.
+Server always computes SHA256 hash and validates against client-provided value.
 
 **Rationale:**
 - **Bandwidth Savings:** Client can call `HEAD /api/photos/check/:sha256` before uploading 4MB file
@@ -101,20 +102,19 @@ Server always computes hashes and validates against client-provided values.
 5. If mismatch → reject (corruption/tampering)
 6. If valid or missing → use server hash
 
-### 4. Dual Hashing: BLAKE3 + SHA256
+### 4. Content Hashing: SHA256
 
-**Decision:** Compute both BLAKE3 and SHA256 for each image
+**Decision:** Use SHA256 for content hashing
 
 **Rationale:**
-- **SHA256:** Industry standard, widest compatibility, used for SID generation
-- **BLAKE3:** Faster, more secure, future-proofing (cryptographic community trend)
-- **Minimal Cost:** Both hashes computed in single file read pass
-- **Flexibility:** Can migrate to BLAKE3-primary later without losing SHA256 compatibility
+- **SHA256:** Industry standard, widely supported, cryptographically secure
+- **Web Crypto API:** Native browser and Worker support (no dependencies)
+- **Deduplication:** Standard hash for detecting duplicate uploads
+- **SID Generation:** Used as primary input for stable ID computation
 
 **Storage:**
 - SHA256 → Used for deduplication endpoint, SID generation
-- BLAKE3 → Stored in R2 headers, available for future use
-- Both → Stored in metadata JSON and x-amz headers
+- Stored in R2 headers, metadata JSON, and D1 table
 
 ### 5. Metadata Storage: Simple Overwrite Pattern
 
@@ -135,9 +135,8 @@ Server always computes hashes and validates against client-provided values.
 **JSON Structure:**
 ```json
 {
-  "sid": "sid_abc123",
-  "sha256": "def456...",
-  "blake3": "xyz789...",
+  "id": "sha256:abc123...",
+  "sha256": "abc123...",
   "file": { /* size, mime, dimensions */ },
   "exif": { /* camera, settings, GPS */ },
   "iptc": { /* title, caption, keywords */ },
@@ -160,8 +159,6 @@ Future C2PA update:
 
 ```
 x-amz-sha256: <hex>           # Content hash
-x-amz-blake3: <hex>           # Alternative hash
-x-amz-stable-id: <sid>        # Asset ID
 x-amz-uploaddate: <ISO8601>   # When uploaded
 x-amz-createdate: <ISO8601>   # From EXIF DateTimeOriginal (if present)
 x-amz-source: pwa|migration   # Origin
@@ -183,9 +180,8 @@ Tags are redundant with headers + D1 + JSON. Skip for MVP to reduce complexity.
 **Main Table (Queryable Fields):**
 ```typescript
 export const photos = sqliteTable('photos', {
-  sid: text('sid').primaryKey(),
+  id: text('id').primaryKey(),  // Format: "sha256:abc123..."
   sha256: text('sha256').notNull().unique(),
-  blake3: text('blake3').notNull(),
   takenAt: integer('taken_at', { mode: 'timestamp' }),
   uploadedAt: integer('uploaded_at', { mode: 'timestamp' }).notNull(),
   cameraMake: text('camera_make'),
@@ -209,7 +205,7 @@ export const photos = sqliteTable('photos', {
 ```typescript
 // Note: Drizzle doesn't natively support FTS5, use raw SQL or future extension
 CREATE VIRTUAL TABLE photos_fts USING fts5(
-  sid UNINDEXED,      -- Join key only
+  id UNINDEXED,       -- Join key only (format: "sha256:...")
   title,              -- IPTC objectName
   caption,            -- IPTC caption
   keywords,           -- IPTC keywords (space-separated)
@@ -239,7 +235,7 @@ CREATE INDEX idx_photos_source ON photos(source);
   ```sql
   -- Text search
   SELECT p.* FROM photos p
-  JOIN photos_fts fts ON p.sid = fts.sid
+  JOIN photos_fts fts ON p.id = fts.id
   WHERE photos_fts MATCH 'sunset beach'
   ORDER BY rank;
 
@@ -262,13 +258,15 @@ CREATE INDEX idx_photos_source ON photos(source);
 ```
 POST /images
   ↓
-[Extract EXIF, compute hashes, generate SID]
+[Extract EXIF, compute SHA256 hash]
+  ↓
+[Generate ID: "sha256:{hash}"]
   ↓
 [Write blob to sr-artifact] ← Synchronous
   ↓
 [Write JSON to sr-json] ← Synchronous
   ↓
-[Send queue message: {sid, r2Key}] ← Fire and forget
+[Send queue message: {id, r2Key}] ← Fire and forget
   ↓
 [Return 201 Created to client]
 
@@ -290,9 +288,9 @@ Queue Consumer (async):
 
 **Upsert Pattern:**
 ```sql
-INSERT INTO photos (sid, sha256, ...)
+INSERT INTO photos (id, sha256, ...)
 VALUES (?, ?, ...)
-ON CONFLICT(sid) DO UPDATE SET
+ON CONFLICT(id) DO UPDATE SET
   sha256 = excluded.sha256,
   updated_at = unixepoch()
 WHERE excluded.sha256 != photos.sha256; -- Only update if hash changed
@@ -300,16 +298,15 @@ WHERE excluded.sha256 != photos.sha256; -- Only update if hash changed
 
 ## Risks / Trade-offs
 
-### Risk: SID Collisions Without pHash
-**Impact:** Two different images could get same SID if EXIF matches and content hash collides
+### Risk: SHA256 Hash Collisions
+**Impact:** Two different images could theoretically have the same SHA256 hash
 
 **Mitigation:**
 - SHA256 collision probability: 2^-256 (astronomically low)
-- UUIDv5 namespace isolation
-- Server validates SHA256 on upload
-- Future: Containers will recalculate SIDs with pHash64
+- Server validates SHA256 on upload (detects corruption/tampering)
+- Content-addressed storage is industry-standard pattern (Git, IPFS, etc.)
 
-**Likelihood:** Negligible
+**Likelihood:** Negligible for practical purposes
 
 ### Risk: Workers CPU Time Limits
 **Impact:** Large images or batch uploads could hit 50ms CPU limit
@@ -318,7 +315,7 @@ WHERE excluded.sha256 != photos.sha256; -- Only update if hash changed
 - Client-side hashing offloads computation
 - Async D1 indexing via queue
 - EXIF extraction with `exifr` is fast (<10ms typical)
-- BLAKE3 faster than SHA256
+- SHA256 via Web Crypto API is optimized
 - Monitor with Cloudflare Analytics
 
 **Likelihood:** Low for typical 4-8MB JPEGs
@@ -344,19 +341,20 @@ WHERE excluded.sha256 != photos.sha256; -- Only update if hash changed
 **Accepted:** MVP simplicity is higher priority
 
 ### Trade-off: JavaScript-Only Hashing
-**Impact:** Slower than native BLAKE3/SHA256, no pHash64
+**Impact:** No pHash64 (perceptual hashing)
 
 **Mitigation:**
+- SHA256 provides reliable content-based deduplication
+- Web Crypto API is optimized for performance
 - Client-side hashing reduces server load
-- Workers subrequests can offload heavy work if needed
-- Future: Containers provide native performance
+- Future: Containers can add pHash64 and recalculate SIDs
 
 **Accepted:** MVP constraint, future path is clear
 
 ## Migration Plan
 
 ### Phase 1: MVP Implementation (This Proposal)
-1. Implement dual hashing with client optimization
+1. Implement SHA256 hashing with client optimization
 2. Create D1 schema with FTS5
 3. Build queue-based indexing
 4. Replace mock upload endpoint
@@ -370,7 +368,7 @@ WHERE excluded.sha256 != photos.sha256; -- Only update if hash changed
 
 ### Phase 3: Future Enhancements (Post-MVP)
 1. **Containers:** Migrate to Go-based `ingest-hasher` container
-2. **pHash64:** Recalculate SIDs with perceptual hashing
+2. **pHash64:** Add perceptual hash field to D1 for visual similarity search (separate from ID)
 3. **C2PA:** Add content authenticity extraction (inline + queue)
 4. **Vectorize:** Add AI embeddings for visual search
 5. **Event Sourcing:** Add JSONL sharding if needed
@@ -384,20 +382,18 @@ If MVP has critical issues:
 
 ## Open Questions
 
-1. **BLAKE3 Library:** Which npm package? `@noble/hashes/blake3` is well-maintained, TypeScript-native, and tree-shakeable. Recommend this unless concerns arise.
-
-2. **FTS5 with Drizzle:** Drizzle doesn't have native FTS5 support. Options:
+1. **FTS5 with Drizzle:** Drizzle doesn't have native FTS5 support. Options:
    - Use raw SQL for FTS5 table creation
    - Wait for Drizzle FTS5 support
    - Use separate migration script for FTS5
 
    **Recommendation:** Raw SQL in migration, Drizzle for main table.
 
-3. **Queue Naming:** Use existing queue or create dedicated `image-indexing` queue?
+2. **Queue Naming:** Use existing queue or create dedicated `image-indexing` queue?
    **Recommendation:** Dedicated queue for isolation and monitoring.
 
-4. **Namespace UUID for SID:** Generate once and document in code, or derive from user/project context?
+3. **Namespace UUID for SID:** Generate once and document in code, or derive from user/project context?
    **Recommendation:** Hardcoded constant for MVP (single-user system).
 
-5. **EXIF Date Parsing:** Handle timezone-less EXIF dates (common issue)?
+4. **EXIF Date Parsing:** Handle timezone-less EXIF dates (common issue)?
    **Recommendation:** Store as-is, interpret as local time for display.

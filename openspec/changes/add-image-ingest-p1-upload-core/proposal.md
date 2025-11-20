@@ -2,37 +2,40 @@
 
 ## Why
 
-The current image upload endpoint is a mock implementation for testing. Phase 1 establishes the complete upload pipeline with production-ready hashing, metadata extraction, deduplication, and R2 storage. This phase focuses on getting the core upload right with proper SID generation (used elsewhere in the system) and efficient client-side optimization.
+The current image upload endpoint is a mock implementation for testing. Phase 1 establishes the complete upload pipeline with production-ready hashing, metadata extraction, and R2 storage. This phase focuses on getting the core upload right with content-addressed IDs and efficient client-side optimization.
 
 Key goals:
 - Preserve photo metadata (EXIF, IPTC, GPS) for the digital archive
-- Enable efficient deduplication to save bandwidth during migration of 50k legacy images
-- Establish stable asset IDs (SID) that are deterministic and used across other systems
+- Establish content-addressed IDs using SHA256 (consistent with other content types)
 - Write once to R2 with complete metadata headers (no rewrites later)
+- Support efficient deduplication in Phase 2 (D1 indexing)
 
 ## What Changes
 
 ### New Capabilities
-- **Dual Content Hashing**: BLAKE3 + SHA256 computed client-side (optional) and validated server-side
-- **Pre-Upload Deduplication**: HEAD endpoint to check if image already exists before uploading
+- **Content-Addressed Storage**: SHA256-based IDs for deterministic deduplication
+- **SHA256 Content Hashing**: SHA256 computed client-side (optional) and validated server-side
 - **Parallel R2 Storage**: Blobs in `sr-artifact` bucket, metadata JSON in `sr-json` bucket (same key structure)
-- **Stable Asset IDs (SID)**: Deterministic IDs based on content hash + EXIF metadata using UUIDv5
-- **Custom R2 Metadata**: x-amz headers for hashes, timestamps, and stable IDs
-- **Client Hash Optimization**: Optional X-Client-SHA256 and X-Client-BLAKE3 headers to offload computation
+- **Custom R2 Metadata**: x-amz headers for hashes, timestamps, and source tracking
+- **Client Hash Optimization**: Optional X-Client-SHA256 header to offload computation
+- **Schema Validation**: Runtime validation of JSON structures before R2 writes and HTTP responses
 
 ### Replaced Components
 - `apps/api/src/services/image-upload.ts` - Complete rewrite with production logic
 - `POST /images` endpoint - Replace mock with full implementation
 
 ### New Components
-- `HEAD /api/photos/check/:sha256` - Pre-upload deduplication endpoint
-- `apps/api/src/services/hash.ts` - Hash computation utilities
-- `apps/api/src/services/sid.ts` - Stable ID generation
+- `apps/api/src/services/hash.ts` - SHA256 hash computation utilities
 - `apps/api/src/services/metadata-json.ts` - Metadata JSON builder
+- `apps/api/src/services/schema-validator.ts` - JSON schema validation (upload response & storage metadata)
+- `schemas/upload-response.schema.json` - JSON Schema for POST /images response
+- `schemas/storage-metadata.schema.json` - JSON Schema for sr-json bucket metadata
+- `schemas/openapi.yaml` - OpenAPI 3.1 specification for image upload endpoint
 
 ### Dependencies
-- Add BLAKE3 hashing library (`@noble/hashes`)
 - Use existing: `exifr`, Cloudflare R2
+- SHA256 available via Web Crypto API (no additional dependencies)
+- Schema validation: simple in-code validation (no external libraries)
 
 ## Impact
 
@@ -41,17 +44,16 @@ Key goals:
 
 ### Affected Code
 - `apps/api/src/services/image-upload.ts` - Complete rewrite
-- `apps/api/src/handlers/http.ts` - Add deduplication endpoint, update upload endpoint
-- `apps/api/package.json` - Add BLAKE3 dependency
+- `apps/api/src/handlers/http.ts` - Update upload endpoint
 
 ### Non-Breaking
 This is a new capability with no breaking changes. The mock endpoint is replaced with production implementation.
 
 ### Future Phases
 This proposal is part 1 of 4:
-- **Phase 1** (this): Upload core with hashing, SID, deduplication, R2 storage
-- **Phase 2**: D1 async indexing for queries
+- **Phase 1** (this): Upload core with SHA256 hashing, R2 storage
+- **Phase 2**: D1 async indexing for queries and deduplication
 - **Phase 3**: Full-text search with FTS5
 - **Phase 4**: OpenAPI documentation
 
-Design decisions made here (SID algorithm, dual hashing, R2 structure) support all future phases.
+Design decisions made here (SHA256 IDs, R2 structure, metadata JSON format) support all future phases.
