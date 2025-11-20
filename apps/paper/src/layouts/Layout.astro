@@ -60,6 +60,15 @@ const structuredData = {
     <link rel="canonical" href={canonicalURL} />
     <meta name="generator" content={Astro.generator} />
 
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="/manifest.json" />
+
+    <!-- iOS PWA Support -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black" />
+    <meta name="apple-mobile-web-app-title" content="SR PWA" />
+    <link rel="apple-touch-icon" href="/favicon.svg" />
+
     <!-- General Meta Tags -->
     <title>{title}</title>
     <meta name="title" content={title} />

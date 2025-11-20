@@ -1,0 +1,17 @@
+{
+  "name": "Second Rodeo PWA",
+  "short_name": "SR PWA",
+  "description": "Upload checkins and chatter on the go",
+  "start_url": "/pwa",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#000000",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}

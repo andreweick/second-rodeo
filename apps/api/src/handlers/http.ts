@@ -32,6 +32,31 @@ export async function handleHttp(request: Request, env: Env): Promise<Response> 
 		});
 	}
 
+	if (url.pathname === '/api/token' && request.method === 'GET') {
+		// This route should be protected by Cloudflare Access
+		// If the request reaches here, the user is authenticated via Zero Trust
+		try {
+			const authToken = await env.AUTH_TOKEN.get();
+			const googlePlacesApiKey = await env.GOOGLE_PLACES_API.get();
+			return new Response(JSON.stringify({ authToken, googlePlacesApiKey }), {
+				status: 200,
+				headers: { 'content-type': 'application/json; charset=utf-8' },
+			});
+		} catch (error) {
+			console.error('Token retrieval error:', error);
+			return new Response(
+				JSON.stringify({
+					error: 'Failed to retrieve tokens',
+					details: error instanceof Error ? error.message : String(error),
+				}),
+				{
+					status: 500,
+					headers: { 'content-type': 'application/json; charset=utf-8' },
+				}
+			);
+		}
+	}
+
 	if (url.pathname === '/api/topten/random' && request.method === 'GET') {
 		try {
 			// Connect to D1 database
