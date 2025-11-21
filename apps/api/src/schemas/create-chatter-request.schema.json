@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://videlicet.example/schemas/create-post-request/1-0-1.json",
-  "title": "CreatePostRequest",
+  "$id": "https://videlicet.example/schemas/create-chatter-request/1-0-1.json",
+  "title": "CreateChatterRequest",
   "type": "object",
   "required": ["kind", "content", "date_posted"],
   "properties": {

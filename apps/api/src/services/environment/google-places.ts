@@ -9,7 +9,7 @@ import type {
 	ApiSnapshot_Geocoding,
 	PlaceSummary,
 	GeocodingSummary,
-} from '../../types/post';
+} from '../../types/chatter';
 import mockPlace from '../../../test/fixtures/environment/mock-place.json';
 import mockGeocoding from '../../../test/fixtures/environment/mock-geocoding.json';
 

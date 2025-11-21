@@ -4,7 +4,7 @@
  */
 
 import type { Env } from '../../types/env';
-import type { ApiSnapshot_Weather, WeatherSummary } from '../../types/post';
+import type { ApiSnapshot_Weather, WeatherSummary } from '../../types/chatter';
 import mockWeather from '../../../test/fixtures/environment/mock-weather.json';
 
 /**

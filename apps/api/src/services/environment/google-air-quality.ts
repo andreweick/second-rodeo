@@ -4,7 +4,7 @@
  */
 
 import type { Env } from '../../types/env';
-import type { ApiSnapshot_AirQuality, AirQualitySummary } from '../../types/post';
+import type { ApiSnapshot_AirQuality, AirQualitySummary } from '../../types/chatter';
 import mockAirQuality from '../../../test/fixtures/environment/mock-air-quality.json';
 
 /**

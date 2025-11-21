@@ -371,7 +371,7 @@ async function submitForm(e) {
       }
     }
 
-    const response = await fetch('/api/posts', {
+    const response = await fetch('/api/chatters', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

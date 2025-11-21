@@ -4,7 +4,7 @@
  */
 
 import type { Env } from '../../types/env';
-import type { ApiSnapshot_Pollen, PollenSummary } from '../../types/post';
+import type { ApiSnapshot_Pollen, PollenSummary } from '../../types/chatter';
 import mockPollen from '../../../test/fixtures/environment/mock-pollen.json';
 
 /**

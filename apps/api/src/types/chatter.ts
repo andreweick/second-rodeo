@@ -1,10 +1,10 @@
 /**
- * TypeScript types for post schema
- * Based on create-post-request.schema.json and post.schema.json
+ * TypeScript types for chatter schema
+ * Based on create-chatter-request.schema.json and chatter.schema.json
  */
 
 // ============================================================================
-// CLIENT REQUEST TYPES (CreatePostRequest)
+// CLIENT REQUEST TYPES (CreateChatterRequest)
 // ============================================================================
 
 export interface LocationHint {
@@ -24,7 +24,7 @@ export interface PlaceInput {
 	provider_ids?: Record<string, string>;
 }
 
-export interface CreatePostRequest {
+export interface CreateChatterRequest {
 	kind: 'chatter';
 	content: string;
 	date_posted: string;
@@ -165,10 +165,10 @@ export interface Environment {
 }
 
 // ============================================================================
-// POST DATA (inner payload)
+// CHATTER DATA (inner payload)
 // ============================================================================
 
-export interface PostData {
+export interface ChatterData {
 	kind: 'chatter';
 	content: string;
 	date_posted: string;
@@ -176,16 +176,18 @@ export interface PostData {
 	tags?: string[];
 	images?: string[];
 	publish?: boolean;
+	location_hint?: LocationHint;
+	place?: PlaceInput;
 	environment?: Environment;
 }
 
 // ============================================================================
-// POST (complete storage format)
+// CHATTER (complete storage format)
 // ============================================================================
 
-export interface Post {
-	type: 'post';
+export interface Chatter {
+	type: 'chatter';
 	id: string; // sha256:...
 	schema_version?: string; // e.g. '1.1.0'
-	data: PostData;
+	data: ChatterData;
 }

@@ -1,14 +1,14 @@
 /**
- * POST /posts endpoint
- * Create a new chatter post with environmental enrichment
+ * POST /chatters endpoint
+ * Create a new chatter with environmental enrichment
  */
 
 import { type Context } from 'hono';
 import { OpenAPIRoute, Str } from 'chanfana';
 import type { Env } from '../types/env';
-import type { CreatePostRequest } from '../types/post';
-import { createAndStorePost } from '../services/post-service';
-import CreatePostRequestSchema from '../schemas/create-post-request.schema.json';
+import type { CreateChatterRequest } from '../types/chatter';
+import { createAndStoreChatter } from '../services/chatter-service';
+import CreateChatterRequestSchema from '../schemas/create-chatter-request.schema.json';
 
 export type AppContext = Context<{ Bindings: Env }>;
 
@@ -27,30 +27,30 @@ async function validateAuth(c: AppContext): Promise<boolean> {
 	return token === authToken;
 }
 
-export class PostCreate extends OpenAPIRoute {
+export class ChatterCreate extends OpenAPIRoute {
 	schema = {
-		tags: ['Posts'],
-		summary: 'Create a new chatter post',
+		tags: ['Chatters'],
+		summary: 'Create a new chatter',
 		description:
-			'Create a new chatter post. The client sends the basic data (kind = chatter, content, date_posted, optional place). The server enriches the post with environmental data and returns the enriched document.',
+			'Create a new chatter. The client sends the basic data (kind = chatter, content, date_posted, optional place). The server enriches the chatter with environmental data and returns the enriched document.',
 		request: {
 			body: {
 				content: {
 					'application/json': {
-						schema: CreatePostRequestSchema,
+						schema: CreateChatterRequestSchema,
 					},
 				},
 			},
 		},
 		responses: {
 			'201': {
-				description: 'Post created successfully',
+				description: 'Chatter created successfully',
 				content: {
 					'application/json': {
 						schema: {
 							type: 'object',
 							properties: {
-								type: { type: 'string', enum: ['post'] },
+								type: { type: 'string', enum: ['chatter'] },
 								id: { type: 'string', description: 'SHA256-based content ID' },
 								schema_version: { type: 'string' },
 								data: {
@@ -154,21 +154,21 @@ export class PostCreate extends OpenAPIRoute {
 			}
 
 			// Get request body
-			const body = await c.req.json<CreatePostRequest>();
+			const body = await c.req.json<CreateChatterRequest>();
 
-			// Create and store post with environmental enrichment
-			const post = await createAndStorePost(body, c.env);
+			// Create and store chatter with environmental enrichment
+			const chatter = await createAndStoreChatter(body, c.env);
 
-			// Return enriched post
-			return c.json(post, {
+			// Return enriched chatter
+			return c.json(chatter, {
 				status: 201,
 			});
 		} catch (error) {
-			console.error('Post creation error:', error);
+			console.error('Chatter creation error:', error);
 
 			return c.json(
 				{
-					error: 'Failed to create post',
+					error: 'Failed to create chatter',
 					details: error instanceof Error ? error.message : String(error),
 				},
 				{

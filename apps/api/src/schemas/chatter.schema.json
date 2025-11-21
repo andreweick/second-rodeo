@@ -1,13 +1,13 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://videlicet.example/schemas/post/1-1-0.json",
-  "title": "PostWithEnvironment",
+  "$id": "https://videlicet.example/schemas/chatter/1-1-0.json",
+  "title": "ChatterWithEnvironment",
   "type": "object",
   "required": ["type", "id", "data"],
   "properties": {
     "type": {
       "type": "string",
-      "enum": ["post"],
+      "enum": ["chatter"],
       "description": "Envelope type."
     },
     "id": {

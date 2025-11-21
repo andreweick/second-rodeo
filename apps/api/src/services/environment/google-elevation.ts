@@ -4,7 +4,7 @@
  */
 
 import type { Env } from '../../types/env';
-import type { ApiSnapshot_Elevation, ElevationSummary } from '../../types/post';
+import type { ApiSnapshot_Elevation, ElevationSummary } from '../../types/chatter';
 import mockElevation from '../../../test/fixtures/environment/mock-elevation.json';
 
 /**

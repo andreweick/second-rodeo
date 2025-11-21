@@ -5,7 +5,7 @@
 
 import { Hono } from 'hono';
 import { fromHono } from 'chanfana';
-import { PostCreate } from './routes/posts';
+import { ChatterCreate } from './routes/chatters';
 import type { Env } from './types/env';
 
 /**
@@ -32,8 +32,8 @@ export function createRouter() {
 		},
 	});
 
-	// Register POST /api/posts endpoint
-	openapi.post('/api/posts', PostCreate);
+	// Register POST /api/chatters endpoint
+	openapi.post('/api/chatters', ChatterCreate);
 
 	return openapi;
 }

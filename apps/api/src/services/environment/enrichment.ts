@@ -1,10 +1,10 @@
 /**
- * Post enrichment orchestrator
- * Coordinates all environmental data fetching and builds the complete Post object
+ * Chatter enrichment orchestrator
+ * Coordinates all environmental data fetching and builds the complete Chatter object
  */
 
 import type { Env } from '../../types/env';
-import type { CreatePostRequest, Post, PostData, Environment } from '../../types/post';
+import type { CreateChatterRequest, Chatter, ChatterData, Environment } from '../../types/chatter';
 import { fetchPlaceDetails, reverseGeocode } from './google-places';
 import { fetchWeather } from './google-weather';
 import { fetchAirQuality } from './google-air-quality';
@@ -12,22 +12,22 @@ import { fetchPollen } from './google-pollen';
 import { fetchElevation } from './google-elevation';
 
 /**
- * Enrich a post with environmental data
+ * Enrich a chatter with environmental data
  * @param request - The client request
  * @param env - Environment bindings
  * @param useMock - Use mock data for testing (default: false)
- * @returns Complete Post object with environmental data
+ * @returns Complete Chatter object with environmental data
  */
-export async function enrichPost(
-	request: CreatePostRequest,
+export async function enrichChatter(
+	request: CreateChatterRequest,
 	env: Env,
 	useMock = false
-): Promise<PostData> {
+): Promise<ChatterData> {
 	// Extract coordinates from location_hint or place
 	const coords = extractCoordinates(request);
 
-	// Build base post data
-	const postData: PostData = {
+	// Build base chatter data
+	const chatterData: ChatterData = {
 		kind: request.kind,
 		content: request.content,
 		date_posted: request.date_posted,
@@ -35,11 +35,13 @@ export async function enrichPost(
 		tags: request.tags || [],
 		images: request.images || [],
 		publish: request.publish !== undefined ? request.publish : true,
+		location_hint: request.location_hint,
+		place: request.place,
 	};
 
-	// If no coordinates available, return post without environmental data
+	// If no coordinates available, return chatter without environmental data
 	if (!coords) {
-		return postData;
+		return chatterData;
 	}
 
 	// Fetch all environmental data in parallel
@@ -101,17 +103,17 @@ export async function enrichPost(
 		}
 	}
 
-	// Add environment to post data
-	postData.environment = environment;
+	// Add environment to chatter data
+	chatterData.environment = environment;
 
-	return postData;
+	return chatterData;
 }
 
 /**
  * Extract coordinates from request (location_hint or place)
  */
 function extractCoordinates(
-	request: CreatePostRequest
+	request: CreateChatterRequest
 ): { lat: number; lng: number } | null {
 	if (request.location_hint) {
 		return {

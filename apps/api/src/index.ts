@@ -25,7 +25,7 @@ export default {
 		}
 
 		// Route API paths through chanfana/hono
-		if (url.pathname.startsWith('/api/posts') || url.pathname === '/openapi.json' || url.pathname === '/docs') {
+		if (url.pathname.startsWith('/api/chatters') || url.pathname === '/openapi.json' || url.pathname === '/docs') {
 			const router = createRouter();
 			return router.fetch(request, env, ctx);
 		}
