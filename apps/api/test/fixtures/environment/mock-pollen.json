@@ -1,0 +1,35 @@
+{
+  "captured_at": "2025-11-20T12:00:00Z",
+  "provider": {
+    "name": "google",
+    "product": "pollen",
+    "version": "v1"
+  },
+  "summary": {
+    "date": "2025-11-20",
+    "index_overall": 3,
+    "index_category": "Moderate",
+    "tree_index": 4,
+    "tree_category": "High",
+    "grass_index": 2,
+    "grass_category": "Low",
+    "weed_index": 3,
+    "weed_category": "Moderate"
+  },
+  "full": {
+    "dailyInfo": [
+      {
+        "pollenTypeInfo": [
+          {
+            "code": "TREE",
+            "displayName": "Tree",
+            "indexInfo": {
+              "value": 4,
+              "category": "High"
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

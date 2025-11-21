@@ -1,6 +1,5 @@
 import type { Env } from '../types/env';
 import { uploadImage, ImageUploadError } from '../services/image-upload';
-import { uploadJSON, JsonUploadError } from '../services/json-upload';
 import { connectD1, schema } from '../db/client';
 import { sql } from 'drizzle-orm';
 
@@ -32,6 +31,17 @@ export async function handleHttp(request: Request, env: Env): Promise<Response> 
 		});
 	}
 
+	if (url.pathname === '/api/token' && request.method === 'OPTIONS') {
+		// Handle CORS preflight
+		return new Response(null, {
+			headers: {
+				'access-control-allow-origin': '*',
+				'access-control-allow-methods': 'GET, OPTIONS',
+				'access-control-allow-headers': 'Content-Type',
+			},
+		});
+	}
+
 	if (url.pathname === '/api/token' && request.method === 'GET') {
 		// This route should be protected by Cloudflare Access
 		// If the request reaches here, the user is authenticated via Zero Trust
@@ -40,7 +50,10 @@ export async function handleHttp(request: Request, env: Env): Promise<Response> 
 			const googlePlacesApiKey = await env.GOOGLE_PLACES_API.get();
 			return new Response(JSON.stringify({ authToken, googlePlacesApiKey }), {
 				status: 200,
-				headers: { 'content-type': 'application/json; charset=utf-8' },
+				headers: {
+					'content-type': 'application/json; charset=utf-8',
+					'access-control-allow-origin': '*',
+				},
 			});
 		} catch (error) {
 			console.error('Token retrieval error:', error);
@@ -51,7 +64,10 @@ export async function handleHttp(request: Request, env: Env): Promise<Response> 
 				}),
 				{
 					status: 500,
-					headers: { 'content-type': 'application/json; charset=utf-8' },
+					headers: {
+						'content-type': 'application/json; charset=utf-8',
+						'access-control-allow-origin': '*',
+					},
 				}
 			);
 		}
@@ -152,35 +168,7 @@ export async function handleHttp(request: Request, env: Env): Promise<Response> 
 		}
 	}
 
-	if (url.pathname === '/upload' && request.method === 'POST') {
-		// Validate authentication
-		if (!(await validateAuth(request, env))) {
-			return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-				status: 401,
-				headers: { 'content-type': 'application/json; charset=utf-8' },
-			});
-		}
-
-		// Upload JSON content
-		try {
-			const response = await uploadJSON(request, env);
-			return response;
-		} catch (error) {
-			if (error instanceof JsonUploadError) {
-				return new Response(JSON.stringify({ error: error.message }), {
-					status: error.statusCode,
-					headers: { 'content-type': 'application/json; charset=utf-8' },
-				});
-			}
-
-			// Unexpected error
-			console.error('JSON upload error:', error);
-			return new Response(JSON.stringify({ error: 'Internal server error' }), {
-				status: 500,
-				headers: { 'content-type': 'application/json; charset=utf-8' },
-			});
-		}
-	}
+	// Note: /upload endpoint has been replaced by /posts (handled by chanfana router)
 
 	if (url.pathname === '/ingest/all' && request.method === 'POST') {
 		// Validate authentication

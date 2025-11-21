@@ -1,0 +1,61 @@
+{
+  "captured_at": "2025-11-20T12:00:00Z",
+  "provider": {
+    "name": "google",
+    "product": "geocoding",
+    "version": "v1"
+  },
+  "summary": {
+    "lat": 37.7749,
+    "lng": -122.4194,
+    "formatted_address": "San Francisco, CA 94103, USA",
+    "country_code": "US",
+    "country_name": "United States",
+    "region_code": "CA",
+    "region_name": "California",
+    "locality": "San Francisco",
+    "postal_code": "94103",
+    "neighborhood": "SoMa",
+    "street_name": "Mint Street",
+    "street_number": "66"
+  },
+  "full": {
+    "results": [
+      {
+        "formatted_address": "San Francisco, CA 94103, USA",
+        "address_components": [
+          {
+            "long_name": "66",
+            "short_name": "66",
+            "types": ["street_number"]
+          },
+          {
+            "long_name": "Mint Street",
+            "short_name": "Mint St",
+            "types": ["route"]
+          },
+          {
+            "long_name": "San Francisco",
+            "short_name": "SF",
+            "types": ["locality", "political"]
+          },
+          {
+            "long_name": "California",
+            "short_name": "CA",
+            "types": ["administrative_area_level_1", "political"]
+          },
+          {
+            "long_name": "United States",
+            "short_name": "US",
+            "types": ["country", "political"]
+          },
+          {
+            "long_name": "94103",
+            "short_name": "94103",
+            "types": ["postal_code"]
+          }
+        ]
+      }
+    ]
+  }
+}

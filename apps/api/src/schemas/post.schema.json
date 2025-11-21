@@ -1,0 +1,305 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://videlicet.example/schemas/post/1-1-0.json",
+  "title": "PostWithEnvironment",
+  "type": "object",
+  "required": ["type", "id", "data"],
+  "properties": {
+    "type": {
+      "type": "string",
+      "enum": ["post"],
+      "description": "Envelope type."
+    },
+    "id": {
+      "type": "string",
+      "description": "Content-addressable identifier (e.g. sha256:...)."
+    },
+    "schema_version": {
+      "type": "string",
+      "description": "Version of this schema used to create the document, e.g. '1.1.0'."
+    },
+    "data": {
+      "type": "object",
+      "required": ["kind", "content", "date_posted"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": ["chatter"],
+          "description": "Logical type of post. Check-ins are chatters with a place."
+        },
+        "title": {
+          "type": "string"
+        },
+        "content": {
+          "type": "string"
+        },
+        "date_posted": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "images": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "uri"
+          }
+        },
+        "publish": {
+          "type": "boolean"
+        },
+        "environment": {
+          "type": "object",
+          "description": "Environmental and contextual snapshots taken at post time.",
+          "properties": {
+            "place": {
+              "$ref": "#/definitions/ApiSnapshot_Place"
+            },
+            "geocoding": {
+              "$ref": "#/definitions/ApiSnapshot_Geocoding"
+            },
+            "elevation": {
+              "$ref": "#/definitions/ApiSnapshot_Elevation"
+            },
+            "weather": {
+              "$ref": "#/definitions/ApiSnapshot_Weather"
+            },
+            "air_quality": {
+              "$ref": "#/definitions/ApiSnapshot_AirQuality"
+            },
+            "pollen": {
+              "$ref": "#/definitions/ApiSnapshot_Pollen"
+            }
+          },
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": false,
+  "definitions": {
+    "ProviderInfo": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Provider name, e.g. 'google'."
+        },
+        "product": {
+          "type": "string",
+          "description": "Logical product or API family, e.g. 'weather', 'air_quality'."
+        },
+        "version": {
+          "type": "string",
+          "description": "Provider API or schema version, e.g. 'v1', '2025-11'."
+        }
+      },
+      "required": ["name", "product"],
+      "additionalProperties": true
+    },
+    "ApiSnapshotBase": {
+      "type": "object",
+      "properties": {
+        "captured_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When this API call was made."
+        },
+        "provider": {
+          "$ref": "#/definitions/ProviderInfo"
+        },
+        "summary": {
+          "type": "object",
+          "description": "Compact, provider-agnostic-ish view in preferred units.",
+          "additionalProperties": true
+        },
+        "full": {
+          "type": "object",
+          "description": "Full provider response body as returned.",
+          "additionalProperties": true
+        }
+      },
+      "required": ["captured_at", "provider", "summary"],
+      "additionalProperties": false
+    },
+    "WeatherSummary": {
+      "type": "object",
+      "properties": {
+        "timestamp": { "type": "string", "format": "date-time" },
+        "temp_f": { "type": "number" },
+        "temp_feels_f": { "type": "number" },
+        "condition_code": { "type": "string" },
+        "condition_text": { "type": "string" },
+        "is_daytime": { "type": "boolean" },
+        "humidity_pct": { "type": "number" },
+        "pressure_inhg": { "type": "number" },
+        "wind_speed_mph": { "type": "number" },
+        "wind_gust_mph": { "type": "number" },
+        "wind_dir_deg": { "type": "number" },
+        "precip_in_last_1h": { "type": "number" },
+        "precip_chance_pct": { "type": "number" },
+        "cloud_pct": { "type": "number" },
+        "visibility_miles": { "type": "number" },
+        "uv_index": { "type": "number" }
+      },
+      "additionalProperties": true
+    },
+    "AirQualitySummary": {
+      "type": "object",
+      "properties": {
+        "timestamp": { "type": "string", "format": "date-time" },
+        "aqi": { "type": "number" },
+        "aqi_scale": { "type": "string" },
+        "aqi_category": { "type": "string" },
+        "dominant_pollutant": { "type": "string" },
+        "pm25_ugm3": { "type": "number" },
+        "pm10_ugm3": { "type": "number" },
+        "o3_ppb": { "type": ["number", "null"] },
+        "no2_ppb": { "type": ["number", "null"] },
+        "so2_ppb": { "type": ["number", "null"] },
+        "co_ppm": { "type": ["number", "null"] }
+      },
+      "additionalProperties": true
+    },
+    "PollenSummary": {
+      "type": "object",
+      "properties": {
+        "date": { "type": "string" },
+        "index_overall": { "type": "number" },
+        "index_category": { "type": "string" },
+        "tree_index": { "type": ["number", "null"] },
+        "tree_category": { "type": ["string", "null"] },
+        "grass_index": { "type": ["number", "null"] },
+        "grass_category": { "type": ["string", "null"] },
+        "weed_index": { "type": ["number", "null"] },
+        "weed_category": { "type": ["string", "null"] }
+      },
+      "additionalProperties": true
+    },
+    "PlaceSummary": {
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "formatted_address": { "type": "string" },
+        "short_address": { "type": "string" },
+        "lat": { "type": "number" },
+        "lng": { "type": "number" },
+        "place_id": { "type": "string" },
+        "maps_url": { "type": "string", "format": "uri" },
+        "website_url": { "type": ["string", "null"], "format": "uri" },
+        "phone": { "type": ["string", "null"] },
+        "types": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "rating": { "type": ["number", "null"] },
+        "user_rating_count": { "type": ["integer", "null"] },
+        "price_level": { "type": ["integer", "null"] },
+        "provider_ids": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        }
+      },
+      "additionalProperties": true
+    },
+    "GeocodingSummary": {
+      "type": "object",
+      "properties": {
+        "lat": { "type": "number" },
+        "lng": { "type": "number" },
+        "formatted_address": { "type": "string" },
+        "country_code": { "type": "string" },
+        "country_name": { "type": "string" },
+        "region_code": { "type": "string" },
+        "region_name": { "type": "string" },
+        "locality": { "type": "string" },
+        "postal_code": { "type": "string" },
+        "neighborhood": { "type": ["string", "null"] },
+        "street_name": { "type": ["string", "null"] },
+        "street_number": { "type": ["string", "null"] }
+      },
+      "additionalProperties": true
+    },
+    "ElevationSummary": {
+      "type": "object",
+      "properties": {
+        "lat": { "type": "number" },
+        "lng": { "type": "number" },
+        "elevation_ft": { "type": "number" }
+      },
+      "additionalProperties": true
+    },
+    "ApiSnapshot_Weather": {
+      "allOf": [
+        { "$ref": "#/definitions/ApiSnapshotBase" },
+        {
+          "type": "object",
+          "properties": {
+            "summary": { "$ref": "#/definitions/WeatherSummary" }
+          }
+        }
+      ]
+    },
+    "ApiSnapshot_AirQuality": {
+      "allOf": [
+        { "$ref": "#/definitions/ApiSnapshotBase" },
+        {
+          "type": "object",
+          "properties": {
+            "summary": { "$ref": "#/definitions/AirQualitySummary" }
+          }
+        }
+      ]
+    },
+    "ApiSnapshot_Pollen": {
+      "allOf": [
+        { "$ref": "#/definitions/ApiSnapshotBase" },
+        {
+          "type": "object",
+          "properties": {
+            "summary": { "$ref": "#/definitions/PollenSummary" }
+          }
+        }
+      ]
+    },
+    "ApiSnapshot_Place": {
+      "allOf": [
+        { "$ref": "#/definitions/ApiSnapshotBase" },
+        {
+          "type": "object",
+          "properties": {
+            "summary": { "$ref": "#/definitions/PlaceSummary" }
+          }
+        }
+      ]
+    },
+    "ApiSnapshot_Geocoding": {
+      "allOf": [
+        { "$ref": "#/definitions/ApiSnapshotBase" },
+        {
+          "type": "object",
+          "properties": {
+            "summary": { "$ref": "#/definitions/GeocodingSummary" }
+          }
+        }
+      ]
+    },
+    "ApiSnapshot_Elevation": {
+      "allOf": [
+        { "$ref": "#/definitions/ApiSnapshotBase" },
+        {
+          "type": "object",
+          "properties": {
+            "summary": { "$ref": "#/definitions/ElevationSummary" }
+          }
+        }
+      ]
+    }
+  }
+}

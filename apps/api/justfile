@@ -1,0 +1,21 @@
+# API justfile
+
+# Run tests
+test:
+	pnpm test
+
+# Run tests in watch mode
+test-watch:
+	pnpm test --watch
+
+# Deploy to production
+deploy:
+	pnpm deploy
+
+# Run development server
+dev:
+	pnpm dev
+
+# Generate TypeScript types from wrangler
+typegen:
+	pnpm cf-typegen

@@ -1,0 +1,37 @@
+{
+  "captured_at": "2025-11-20T12:00:00Z",
+  "provider": {
+    "name": "google",
+    "product": "weather",
+    "version": "v1"
+  },
+  "summary": {
+    "timestamp": "2025-11-20T12:00:00Z",
+    "temp_f": 72,
+    "temp_feels_f": 70,
+    "condition_code": "clear",
+    "condition_text": "Clear",
+    "is_daytime": true,
+    "humidity_pct": 55,
+    "pressure_inhg": 30.1,
+    "wind_speed_mph": 8.5,
+    "wind_gust_mph": 12.0,
+    "wind_dir_deg": 225,
+    "precip_in_last_1h": 0.0,
+    "precip_chance_pct": 5,
+    "cloud_pct": 10,
+    "visibility_miles": 10.0,
+    "uv_index": 6
+  },
+  "full": {
+    "temperature": {
+      "degrees": 72,
+      "unit": "FAHRENHEIT"
+    },
+    "weatherCondition": {
+      "description": {
+        "text": "Clear"
+      }
+    }
+  }
+}

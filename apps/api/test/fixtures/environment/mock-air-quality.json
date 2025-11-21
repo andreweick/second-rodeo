@@ -1,0 +1,29 @@
+{
+  "captured_at": "2025-11-20T12:00:00Z",
+  "provider": {
+    "name": "google",
+    "product": "air_quality",
+    "version": "v1"
+  },
+  "summary": {
+    "timestamp": "2025-11-20T12:00:00Z",
+    "aqi": 45,
+    "aqi_scale": "US EPA",
+    "aqi_category": "Good",
+    "dominant_pollutant": "PM2.5",
+    "pm25_ugm3": 12.5,
+    "pm10_ugm3": 25.0,
+    "o3_ppb": 35.0,
+    "no2_ppb": 15.0,
+    "so2_ppb": 5.0,
+    "co_ppm": 0.4
+  },
+  "full": {
+    "indexes": [
+      {
+        "aqi": 45,
+        "category": "Good"
+      }
+    ]
+  }
+}

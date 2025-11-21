@@ -1,0 +1,25 @@
+{
+  "captured_at": "2025-11-20T12:00:00Z",
+  "provider": {
+    "name": "google",
+    "product": "elevation",
+    "version": "v1"
+  },
+  "summary": {
+    "lat": 37.7749,
+    "lng": -122.4194,
+    "elevation_ft": 52
+  },
+  "full": {
+    "results": [
+      {
+        "elevation": 15.8,
+        "location": {
+          "lat": 37.7749,
+          "lng": -122.4194
+        },
+        "resolution": 4.771975994110107
+      }
+    ]
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "captured_at": "2025-11-20T12:00:00Z",
+  "provider": {
+    "name": "google",
+    "product": "places",
+    "version": "v1"
+  },
+  "summary": {
+    "name": "Blue Bottle Coffee",
+    "formatted_address": "66 Mint St, San Francisco, CA 94103, USA",
+    "short_address": "66 Mint St",
+    "lat": 37.7749,
+    "lng": -122.4194,
+    "place_id": "ChIJIQBpAG2ahYAR_6128GcTUEo",
+    "maps_url": "https://maps.google.com/?cid=12345",
+    "website_url": "https://bluebottlecoffee.com",
+    "phone": "+1 415-555-0123",
+    "types": ["cafe", "food", "point_of_interest", "establishment"],
+    "rating": 4.5,
+    "user_rating_count": 1234,
+    "price_level": 2,
+    "provider_ids": {
+      "google_places": "ChIJIQBpAG2ahYAR_6128GcTUEo"
+    }
+  },
+  "full": {
+    "displayName": {
+      "text": "Blue Bottle Coffee"
+    },
+    "formattedAddress": "66 Mint St, San Francisco, CA 94103, USA",
+    "location": {
+      "latitude": 37.7749,
+      "longitude": -122.4194
+    }
+  }
+}

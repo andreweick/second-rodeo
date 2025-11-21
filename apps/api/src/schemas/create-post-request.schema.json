@@ -1,0 +1,73 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://videlicet.example/schemas/create-post-request/1-0-1.json",
+  "title": "CreatePostRequest",
+  "type": "object",
+  "required": ["kind", "content", "date_posted"],
+  "properties": {
+    "kind": {
+      "type": "string",
+      "enum": ["chatter"],
+      "description": "Post type; currently only 'chatter'. Check-ins are chatters with a place."
+    },
+    "content": {
+      "type": "string"
+    },
+    "date_posted": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "tags": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "images": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "format": "uri"
+      }
+    },
+    "publish": {
+      "type": "boolean",
+      "default": true
+    },
+    "location_hint": {
+      "type": "object",
+      "description": "Optional raw geolocation from the device.",
+      "properties": {
+        "lat": { "type": "number" },
+        "lng": { "type": "number" },
+        "accuracy_m": { "type": "number" }
+      },
+      "required": ["lat", "lng"],
+      "additionalProperties": false
+    },
+    "place": {
+      "type": "object",
+      "description": "Optional place the user selected; if present, this chatter is effectively a check-in.",
+      "properties": {
+        "name": { "type": "string" },
+        "formatted_address": { "type": "string" },
+        "short_address": { "type": "string" },
+        "location": {
+          "type": "object",
+          "properties": {
+            "lat": { "type": "number" },
+            "lng": { "type": "number" }
+          },
+          "required": ["lat", "lng"],
+          "additionalProperties": false
+        },
+        "provider_ids": {
+          "type": "object",
+          "description": "Provider-specific IDs (e.g. google_places, apple_maps).",
+          "additionalProperties": { "type": "string" }
+        }
+      },
+      "required": ["name", "formatted_address", "location"],
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}
